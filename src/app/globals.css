@@ -24,7 +24,7 @@
     --border: 0 0% 14%;
     --input: 0 0% 14%;
     --ring: 0 0% 60%;
-    --radius: 0.625rem;
+    --radius: 0;
 
     /* Sidebar */
     --sidebar-background: 0 0% 4%;
@@ -93,7 +93,6 @@
 
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
-  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -134,7 +133,7 @@
   }
 
   .card-header-icon {
-    @apply w-10 h-10 rounded-xl bg-foreground flex items-center justify-center;
+    @apply w-10 h-10 bg-foreground flex items-center justify-center;
   }
 
   .card-header-icon-inner {
@@ -146,7 +145,7 @@
   }
 
   .card-empty-icon {
-    @apply w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center;
+    @apply w-16 h-16 mx-auto mb-4 bg-muted flex items-center justify-center;
   }
 
   .card-empty-icon-inner {
@@ -334,7 +333,7 @@
    ============================================ */
 @layer components {
   .gradient-icon {
-    @apply w-12 h-12 rounded-xl flex items-center justify-center text-white;
+    @apply w-12 h-12 flex items-center justify-center text-white;
   }
 
   .gradient-success {

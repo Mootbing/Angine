@@ -238,7 +238,7 @@ export default function ToolsPage() {
               <CardContent className="p-6">
                 <div className="flex gap-4">
                   <div className={cn(
-                    "w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br",
+                    "w-12 h-12 flex items-center justify-center shrink-0 bg-gradient-to-br",
                     categoryColors[agent.category || "general"] || categoryColors.general,
                     "group-hover:scale-110 transition-transform"
                   )}>

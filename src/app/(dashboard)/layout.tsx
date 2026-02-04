@@ -81,7 +81,7 @@ export default function DashboardLayout({
         {/* Logo */}
         <div className="p-6">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
+            <div className="w-9 h-9 bg-foreground flex items-center justify-center">
               <Zap className="w-5 h-5 text-background" />
             </div>
             <div>
@@ -106,7 +106,7 @@ export default function DashboardLayout({
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                        "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all",
                         isActive
                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
@@ -139,7 +139,7 @@ export default function DashboardLayout({
             asChild
           >
             <a href="/api/v1/health" target="_blank" rel="noopener noreferrer">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse mr-2" />
+              <div className="w-2 h-2 bg-green-500 animate-pulse mr-2" />
               API Status
               <ExternalLink className="w-3 h-3 ml-auto" />
             </a>

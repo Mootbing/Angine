@@ -299,7 +299,14 @@ async function executeTool(
         // Lazy load E2B
         if (!ctx.sandbox) {
           const { Sandbox } = await import("e2b");
-          ctx.sandbox = await Sandbox.create({ timeoutMs: 300000 });
+          const e2bApiKey = process.env.E2B_API_KEY?.trim();
+          if (!e2bApiKey) {
+            return { error: "E2B_API_KEY not configured" };
+          }
+          ctx.sandbox = await Sandbox.create({
+            apiKey: e2bApiKey,
+            timeoutMs: 300000
+          });
           await addLog(ctx.jobId, `Sandbox created: ${ctx.sandbox.sandboxId}`, "debug");
 
           // Install common packages
@@ -398,7 +405,8 @@ type HitlMode = "plan_approval" | "auto_execute" | "always_ask";
 
 async function runAgentLoop(job: Job, signal: AbortSignal): Promise<AgentResult> {
   const model = (job as any).model || "anthropic/claude-sonnet-4";
-  const MAX_ITERATIONS = 20;
+  // No iteration limit - timeout handles killing long-running jobs
+  const timeoutSeconds = (job as any).timeout_seconds || 300;
 
   // Get HITL mode from execution state (default to plan_approval)
   const hitlMode: HitlMode = (job.execution_state as any)?.context?.hitl_mode || "plan_approval";
@@ -583,13 +591,15 @@ DO NOT execute any actions (fetch_url, run_python, write_file) until the user ap
 
   await addLog(job.id, `Starting agent loop with ${model}`, "info");
 
-  // Agent loop
-  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+  // Agent loop - no iteration limit, timeout handles termination
+  let iteration = 0;
+  while (true) {
+    iteration++;
     if (signal.aborted) {
       throw new Error("Job was cancelled");
     }
 
-    await addLog(job.id, `Iteration ${iteration + 1}/${MAX_ITERATIONS}`, "debug");
+    await addLog(job.id, `Iteration ${iteration}`, "debug");
 
     // Call LLM
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -707,16 +717,6 @@ DO NOT execute any actions (fetch_url, run_python, write_file) until the user ap
       });
     }
   }
-
-  // Max iterations reached
-  if (ctx.sandbox) {
-    try { await ctx.sandbox.kill(); } catch {}
-  }
-
-  return {
-    success: false,
-    error: `Agent reached max iterations (${MAX_ITERATIONS}) without completing the task`,
-  };
 }
 
 // ============================================

@@ -518,7 +518,11 @@ Examples:
               </div>
 
               {/* HITL Mode Description */}
-              <p className="text-xs text-muted-foreground">
+              <p className={cn(
+                "text-xs",
+                selectedHitlMode === "auto_execute" ? "text-red-400 font-medium" : "text-muted-foreground"
+              )}>
+                {selectedHitlMode === "auto_execute" && <span className="font-bold">[DANGER] </span>}
                 {hitlModeOptions.find(o => o.value === selectedHitlMode)?.description}
               </p>
 

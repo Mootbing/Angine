@@ -78,6 +78,20 @@ const TOOLS: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "discover_tools",
+      description: "Search for additional specialized tools (MCP servers) that might help with the task. Use this when you need capabilities beyond the basic built-in tools (e.g., browser automation, GitHub integration, etc.).",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Description of what kind of tool you're looking for (e.g., 'browser automation', 'file management', 'GitHub operations')" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "fetch_url",
       description: "Fetch content from a URL and return it as text. Useful for reading web pages, APIs, or downloading data.",
       parameters: {
@@ -184,6 +198,63 @@ async function executeTool(
 ): Promise<{ result?: string; askUser?: string; finalAnswer?: string; error?: string }> {
   try {
     switch (toolName) {
+      case "discover_tools": {
+        const { query } = args;
+        await addLog(ctx.jobId, `Discovering tools for: ${query}`, "info");
+
+        try {
+          // Call the discovery API
+          const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('.supabase.co', '')?.includes('localhost') ? 'http://localhost:3000' : 'https://engine.payo.dev'}/api/v1/agents/discover`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${process.env.WORKER_API_KEY || 'internal'}`,
+            },
+            body: JSON.stringify({ task: query, threshold: 0.3, limit: 5 }),
+          });
+
+          if (!response.ok) {
+            // Fallback: query database directly
+            const { data: agents } = await supabase
+              .from("agents")
+              .select("name, description, mcp_package, mcp_tools")
+              .eq("verified", true);
+
+            if (agents && agents.length > 0) {
+              const toolList = agents.map((a: any) => {
+                const tools = a.mcp_tools || [];
+                return `**${a.name}** (${a.mcp_package})\n${a.description}\nTools: ${tools.map((t: any) => t.name).join(", ")}`;
+              }).join("\n\n");
+
+              return { result: `Available MCP servers:\n\n${toolList}\n\nNote: These are external MCP servers. Currently, only built-in tools (fetch_url, run_python, read_file, write_file, ask_user, final_answer) are directly executable. Use the built-in tools to accomplish your task.` };
+            }
+          }
+
+          const data = await response.json();
+          const agents = data.agents || [];
+
+          if (agents.length === 0) {
+            return { result: "No specialized tools found for this query. Use the built-in tools (fetch_url, run_python, read_file, write_file) to accomplish the task." };
+          }
+
+          // Get full agent details
+          const { data: fullAgents } = await supabase
+            .from("agents")
+            .select("name, description, mcp_package, mcp_tools")
+            .in("id", agents.map((a: any) => a.id));
+
+          const toolList = (fullAgents || []).map((a: any) => {
+            const tools = a.mcp_tools || [];
+            const similarity = agents.find((x: any) => x.name === a.name)?.similarity || 0;
+            return `**${a.name}** (${Math.round(similarity * 100)}% match)\n${a.description}\nPackage: ${a.mcp_package}\nAvailable tools: ${tools.map((t: any) => `${t.name} - ${t.description}`).join("; ")}`;
+          }).join("\n\n");
+
+          return { result: `Discovered tools relevant to "${query}":\n\n${toolList}\n\nNote: These are MCP servers that could help with this task. Currently, only built-in tools are directly executable. Use fetch_url, run_python, read_file, and write_file to accomplish similar functionality.` };
+        } catch (err) {
+          return { result: "Tool discovery unavailable. Use built-in tools: fetch_url (web requests), run_python (code execution), read_file, write_file." };
+        }
+      }
+
       case "fetch_url": {
         const { url, method = "GET", headers = {}, body } = args;
         await addLog(ctx.jobId, `Fetching ${method} ${url}`, "info");
@@ -363,21 +434,42 @@ async function runAgentLoop(job: Job, signal: AbortSignal): Promise<AgentResult>
   const messages: Array<{ role: string; content?: string; tool_calls?: ToolCall[]; tool_call_id?: string; name?: string }> = [];
 
   // System message
-  let systemContent = `You are a helpful assistant that completes tasks using the available tools.
+  let systemContent = `You are an intelligent agent that completes tasks using available tools. You have access to a tool marketplace with many specialized capabilities.
 
-Available tools:
-- fetch_url: Fetch content from URLs (web pages, APIs)
-- run_python: Execute Python code for calculations, data processing, file creation
-- read_file: Read uploaded attachments
-- write_file: Save files as artifacts
-- ask_user: Ask the user for clarification
-- final_answer: Return the final result (MUST be called to complete the task)
+## IMPORTANT: You MUST follow this workflow
 
-Guidelines:
-1. Break complex tasks into steps
-2. Use run_python for any calculations or data processing
-3. Always call final_answer when done
-4. If you need user input, use ask_user`;
+1. **ANALYZE** - Understand what the task requires
+2. **DISCOVER** - Use discover_tools to find relevant specialized tools
+3. **PLAN** - Create a high-level plan based on available tools
+4. **ASK FOR APPROVAL** - Use ask_user to present your plan and wait for user approval BEFORE executing anything
+5. **EXECUTE** - Only after approval, execute your plan step by step
+6. **COMPLETE** - Call final_answer with the result
+
+## Your First Response MUST:
+1. Call discover_tools to see what specialized tools are available
+2. Then call ask_user with a brief summary of:
+   - What tools you found that could help
+   - Your proposed approach/plan (3-5 bullet points)
+   - Ask: "Should I proceed with this plan?"
+
+DO NOT execute any actions (fetch_url, run_python, write_file) until the user approves your plan!
+
+## Built-in Tools
+
+- **discover_tools**: Search for specialized MCP tools (browser automation, GitHub, etc.) - USE THIS FIRST
+- **fetch_url**: Fetch content from URLs (web pages, APIs)
+- **run_python**: Execute Python code for calculations, data processing
+- **read_file**: Read uploaded file attachments
+- **write_file**: Save files as job artifacts
+- **ask_user**: Pause and ask user a question - USE THIS TO GET PLAN APPROVAL
+- **final_answer**: Return the final result (REQUIRED to complete)
+
+## Guidelines
+
+- ALWAYS discover tools and ask for approval before executing
+- Keep your plan summary concise (high-level steps only)
+- After approval, execute efficiently
+- Call final_answer when done`;
 
   if (attachments.size > 0) {
     systemContent += `\n\nUploaded files available:\n`;

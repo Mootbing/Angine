@@ -4,6 +4,7 @@ import { authenticateRequest, errorResponse, successResponse } from "@/lib/api/a
 import { enqueueJob, listJobs } from "@/lib/queue";
 import { discoverAgents } from "@/lib/discovery";
 import { setDiscoveredTools, addJobLog } from "@/lib/queue";
+import { getSupabaseAdmin } from "@/lib/db";
 
 // Available models for OpenRouter
 const AVAILABLE_MODELS = [
@@ -22,6 +23,13 @@ const createJobSchema = z.object({
   priority: z.number().int().min(0).max(100).optional().default(0),
   timeout_seconds: z.number().int().min(30).max(3600).optional().default(300),
   model: z.string().optional().default("anthropic/claude-sonnet-4"),
+  attachments: z.array(z.object({
+    filename: z.string(),
+    storage_path: z.string(),
+    public_url: z.string(),
+    mime_type: z.string().optional(),
+    size_bytes: z.number().optional(),
+  })).optional(),
 });
 
 /**
@@ -45,7 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { task, priority, timeout_seconds, model } = parsed.data;
+    const { task, priority, timeout_seconds, model, attachments } = parsed.data;
 
     // Create the job
     const job = await enqueueJob({
@@ -57,6 +65,22 @@ export async function POST(request: NextRequest) {
     });
 
     await addJobLog(job.id, `Job created: ${task.substring(0, 100)}...`, "info");
+
+    // Save attachments if provided
+    if (attachments && attachments.length > 0) {
+      const supabase = getSupabaseAdmin();
+      for (const attachment of attachments) {
+        await supabase.from("job_attachments").insert({
+          job_id: job.id,
+          filename: attachment.filename,
+          mime_type: attachment.mime_type || null,
+          storage_path: attachment.storage_path,
+          public_url: attachment.public_url,
+          size_bytes: attachment.size_bytes || null,
+        });
+      }
+      await addJobLog(job.id, `Attached ${attachments.length} file(s): ${attachments.map(a => a.filename).join(", ")}`, "info");
+    }
 
     // Discover relevant agents/tools (async, don't block response)
     discoverAgents({ task })

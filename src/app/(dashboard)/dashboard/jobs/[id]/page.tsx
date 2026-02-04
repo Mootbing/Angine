@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { cn, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,7 @@ export default function JobDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [editedPlan, setEditedPlan] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   const getApiKey = () => localStorage.getItem("engine_api_key") || "";
 
@@ -205,6 +206,11 @@ export default function JobDetailPage() {
 
     return () => clearInterval(interval);
   }, [jobId]);
+
+  // Auto-scroll logs to bottom when new logs arrive
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
 
   if (loading) {
     return (
@@ -584,6 +590,7 @@ export default function JobDetailPage() {
                     <span className="text-foreground/80 break-all">{log.message}</span>
                   </div>
                 ))}
+                <div ref={logsEndRef} />
               </div>
             </ScrollArea>
           )}

@@ -75,7 +75,6 @@ export default function DashboardPage() {
   const [selectedModel, setSelectedModel] = useState("anthropic/claude-sonnet-4");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [lastJobId, setLastJobId] = useState<string | null>(null);
 
   const [uploadedFiles, setUploadedFiles] = useState<Array<{
     filename: string;
@@ -150,10 +149,7 @@ export default function DashboardPage() {
       }
 
       const job = await res.json();
-      setLastJobId(job.id);
-      setTaskInput("");
-      setUploadedFiles([]);
-      fetchMetrics();
+      router.push(`/dashboard/jobs/${job.id}`);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -424,22 +420,6 @@ Examples:
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{submitError}</AlertDescription>
-              </Alert>
-            )}
-
-            {lastJobId && (
-              <Alert className="border-violet-500/20 bg-violet-500/10">
-                <CheckCircle2 className="h-4 w-4 text-violet-500" />
-                <AlertDescription className="text-violet-400">
-                  Job created!{" "}
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto text-violet-400 hover:text-violet-300"
-                    onClick={() => router.push(`/dashboard/jobs/${lastJobId}`)}
-                  >
-                    View job →
-                  </Button>
-                </AlertDescription>
               </Alert>
             )}
           </form>

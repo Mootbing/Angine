@@ -190,7 +190,7 @@ Common imports you can use: json, csv, math, random, datetime, re, os, sys, urll
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,
-      max_tokens: 4096,
+      max_tokens: 2000,
     }),
   });
 

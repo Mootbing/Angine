@@ -264,8 +264,8 @@ async function runInSandbox(
  * Build agent runner script
  */
 function buildAgentScript(job: Job): string {
-  const stateJson = job.execution_state ? JSON.stringify(job.execution_state) : "null";
-  const userAnswer = job.user_answer ? JSON.stringify(job.user_answer) : "null";
+  const stateJson = job.execution_state ? JSON.stringify(job.execution_state) : "None";
+  const userAnswer = job.user_answer ? JSON.stringify(job.user_answer) : "None";
 
   return `
 import json

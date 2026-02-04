@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 interface Job {
@@ -15,6 +16,7 @@ interface Job {
 }
 
 export default function JobsPage() {
+  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +112,11 @@ export default function JobsPage() {
             </thead>
             <tbody>
               {jobs.map((job) => (
-                <tr key={job.id} className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50">
+                <tr
+                  key={job.id}
+                  onClick={() => router.push(`/dashboard/jobs/${job.id}`)}
+                  className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                >
                   <td className="px-4 py-3">
                     <div className="max-w-md truncate text-sm">{job.task}</div>
                     <div className="text-xs text-zinc-500 font-mono">{job.id}</div>
@@ -128,12 +134,9 @@ export default function JobsPage() {
                     {new Date(job.created_at).toLocaleString()}
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/dashboard/jobs/${job.id}`}
-                      className="text-sm text-blue-400 hover:text-blue-300"
-                    >
-                      View
-                    </Link>
+                    <span className="text-sm text-blue-400">
+                      View →
+                    </span>
                   </td>
                 </tr>
               ))}

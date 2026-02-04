@@ -1,35 +1,35 @@
-import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/db";
 import type { Agent } from "@/types";
 
-// Lazy initialization of OpenAI client
-let openai: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (openai) return openai;
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY environment variable");
-  }
-
-  openai = new OpenAI({ apiKey });
-  return openai;
-}
-
 /**
- * Generate embedding for a text using OpenAI
+ * Generate embedding for a text using OpenRouter
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const client = getOpenAI();
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing OPENROUTER_API_KEY environment variable");
+  }
 
-  const response = await client.embeddings.create({
-    model: "text-embedding-3-small",
-    input: text,
-    dimensions: 1536,
+  const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "openai/text-embedding-3-small",
+      input: text,
+      dimensions: 1536,
+    }),
   });
 
-  return response.data[0].embedding;
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenRouter embeddings error: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+  return data.data[0].embedding;
 }
 
 /**

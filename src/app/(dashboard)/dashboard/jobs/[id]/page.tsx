@@ -62,7 +62,7 @@ interface Log {
 const statusConfig: Record<string, { color: string; bg: string; border: string; icon: React.ReactNode }> = {
   queued: { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", icon: <Clock className="w-4 h-4" /> },
   running: { color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", icon: <Loader2 className="w-4 h-4 animate-spin" /> },
-  completed: { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", icon: <CheckCircle2 className="w-4 h-4" /> },
+  completed: { color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20", icon: <CheckCircle2 className="w-4 h-4" /> },
   failed: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20", icon: <AlertCircle className="w-4 h-4" /> },
   waiting_for_user: { color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", icon: <MessageSquare className="w-4 h-4" /> },
   cancelled: { color: "text-zinc-400", bg: "bg-zinc-500/10", border: "border-zinc-500/20", icon: <AlertCircle className="w-4 h-4" /> },
@@ -289,7 +289,7 @@ export default function JobDetailPage() {
       {job.result && (
         <Card className="bg-card/50 backdrop-blur border-border/50">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-emerald-400">
+            <CardTitle className="flex items-center gap-2 text-violet-400">
               <CheckCircle2 className="w-5 h-5" />
               Result
             </CardTitle>

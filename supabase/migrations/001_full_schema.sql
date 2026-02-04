@@ -445,5 +445,27 @@ VALUES
     'https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking',
     'Anthropic',
     true, true, NOW()
+  ),
+  (
+    'BrowserBase',
+    'Cloud browser automation with Stagehand. Navigate pages, extract data, take screenshots, fill forms with AI-powered precision.',
+    '@browserbasehq/mcp-server-browserbase',
+    '1.0.0',
+    'web',
+    'stdio',
+    ARRAY[]::TEXT[],
+    '[
+      {"name": "browserbase_create_session", "description": "Create a new cloud browser session"},
+      {"name": "browserbase_navigate", "description": "Navigate to a URL"},
+      {"name": "browserbase_screenshot", "description": "Take a screenshot of the current page"},
+      {"name": "browserbase_click", "description": "Click an element on the page"},
+      {"name": "browserbase_fill", "description": "Fill an input field"},
+      {"name": "browserbase_extract", "description": "Extract structured data from the page"},
+      {"name": "browserbase_close_session", "description": "Close a browser session"}
+    ]'::jsonb,
+    'Requires BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID env vars.',
+    'https://github.com/browserbase/mcp-server-browserbase',
+    'BrowserBase',
+    true, true, NOW()
   )
 ON CONFLICT (mcp_package) DO NOTHING;

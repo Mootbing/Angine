@@ -188,6 +188,23 @@ export interface WorkerConfig {
   shutdownTimeout: number;
 }
 
+// Structured agent message types for plan approval UI
+export interface AgentPlan {
+  type: "plan";
+  plan: string;
+  question: string;
+}
+
+export interface AgentQuestion {
+  type: "question";
+  question: string;
+}
+
+export type StructuredAgentMessage = AgentPlan | AgentQuestion;
+
+// Response action types for plan approval
+export type RespondAction = "approve" | "reject" | "edit" | "respond";
+
 // Error types
 export class ApiError extends Error {
   constructor(

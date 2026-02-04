@@ -25,7 +25,12 @@ import {
   Timer,
   RotateCcw,
   ArrowLeft,
+  Edit3,
+  X,
+  Check,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import ReactMarkdown from "react-markdown";
 import Link from "next/link";
 
 interface Job {
@@ -78,8 +83,28 @@ export default function JobDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [editedPlan, setEditedPlan] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
 
   const getApiKey = () => localStorage.getItem("engine_api_key") || "";
+
+  // Parse agent_question to detect JSON plan vs plain text
+  type ParsedMessage =
+    | { type: "plan"; plan: string; question: string }
+    | { type: "text"; question: string };
+
+  const parseAgentMessage = (raw: string | null): ParsedMessage | null => {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.type === "plan" && typeof parsed.plan === "string") {
+        return { type: "plan", plan: parsed.plan, question: parsed.question || "Should I proceed?" };
+      }
+    } catch {
+      // Not JSON, treat as plain text
+    }
+    return { type: "text", question: raw };
+  };
 
   const fetchJob = async () => {
     const apiKey = getApiKey();
@@ -125,33 +150,49 @@ export default function JobDetailPage() {
     } catch {}
   };
 
-  const submitAnswer = async () => {
-    if (!answer.trim()) return;
+  const submitResponse = async (action: "approve" | "reject" | "edit" | "respond") => {
+    // For approve, we don't require answer text
+    if (action !== "approve" && !answer.trim() && action !== "edit") return;
+    // For edit, we need editedPlan
+    if (action === "edit" && !editedPlan.trim()) return;
 
     setSubmitting(true);
     try {
+      const body: { answer: string; action: string; editedPlan?: string } = {
+        answer: answer.trim() || (action === "approve" ? "Approved" : ""),
+        action,
+      };
+      if (action === "edit") {
+        body.editedPlan = editedPlan;
+      }
+
       const res = await fetch(`/api/v1/jobs/${jobId}/respond`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${getApiKey()}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ answer }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to submit answer");
+        throw new Error(data.error || "Failed to submit response");
       }
 
       setAnswer("");
+      setEditedPlan("");
+      setIsEditing(false);
       fetchJob();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to submit answer");
+      alert(err instanceof Error ? err.message : "Failed to submit response");
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Legacy function for backward compatibility
+  const submitAnswer = () => submitResponse("respond");
 
   useEffect(() => {
     fetchJob();
@@ -251,39 +292,182 @@ export default function JobDetailPage() {
         </Card>
       </div>
 
-      {/* HITL Question */}
-      {job.status === "waiting_for_user" && job.agent_question && (
-        <Card className="bg-yellow-500/5 border-yellow-500/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-yellow-400">
-              <MessageSquare className="w-5 h-5" />
-              Agent Question
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-foreground">{job.agent_question}</p>
-            <div className="flex gap-2">
-              <Input
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Your response..."
-                className="bg-background"
-                onKeyDown={(e) => e.key === "Enter" && submitAnswer()}
-              />
-              <Button
-                onClick={submitAnswer}
-                disabled={submitting || !answer.trim()}
-              >
-                {submitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+      {/* HITL Question / Plan Approval */}
+      {job.status === "waiting_for_user" && job.agent_question && (() => {
+        const parsed = parseAgentMessage(job.agent_question);
+        if (!parsed) return null;
+
+        if (parsed.type === "plan") {
+          // Enhanced Plan Approval UI
+          return (
+            <Card className="bg-yellow-500/5 border-yellow-500/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-yellow-400">
+                  <MessageSquare className="w-5 h-5" />
+                  Plan Approval Required
+                </CardTitle>
+                <CardDescription>{parsed.question}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Plan Display / Edit */}
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Editing Plan</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setIsEditing(false);
+                          setEditedPlan("");
+                        }}
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Cancel
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={editedPlan}
+                      onChange={(e) => setEditedPlan(e.target.value)}
+                      placeholder="Edit the plan..."
+                      className="min-h-[200px] font-mono text-sm bg-background"
+                    />
+                  </div>
                 ) : (
-                  <Send className="w-4 h-4" />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Proposed Plan</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditedPlan(parsed.plan);
+                          setIsEditing(true);
+                        }}
+                      >
+                        <Edit3 className="w-4 h-4 mr-1" />
+                        Edit Plan
+                      </Button>
+                    </div>
+                    <div className="prose prose-sm prose-invert max-w-none bg-black/30 rounded-lg p-4 overflow-x-auto
+                      prose-headings:text-foreground prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
+                      prose-p:text-foreground/90 prose-p:my-2
+                      prose-li:text-foreground/90 prose-li:my-1
+                      prose-strong:text-foreground prose-code:text-blue-400 prose-code:bg-black/40 prose-code:px-1 prose-code:rounded
+                      prose-ol:my-2 prose-ul:my-2">
+                      <ReactMarkdown>{parsed.plan}</ReactMarkdown>
+                    </div>
+                  </div>
                 )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
+                {/* Feedback textarea */}
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {isEditing ? "Additional Feedback (optional)" : "Response / Feedback (optional for approve)"}
+                  </span>
+                  <Textarea
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    placeholder={isEditing ? "Any additional instructions..." : "Add feedback or instructions..."}
+                    className="min-h-[80px] bg-background"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {isEditing ? (
+                    <Button
+                      onClick={() => submitResponse("edit")}
+                      disabled={submitting || !editedPlan.trim()}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {submitting ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                      ) : (
+                        <Check className="w-4 h-4 mr-1" />
+                      )}
+                      Submit Edited Plan
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={() => submitResponse("approve")}
+                        disabled={submitting}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {submitting ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <Check className="w-4 h-4 mr-1" />
+                        )}
+                        Approve Plan
+                      </Button>
+                      <Button
+                        onClick={() => submitResponse("reject")}
+                        disabled={submitting || !answer.trim()}
+                        variant="destructive"
+                      >
+                        {submitting ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <X className="w-4 h-4 mr-1" />
+                        )}
+                        Reject
+                      </Button>
+                      <Button
+                        onClick={() => submitResponse("respond")}
+                        disabled={submitting || !answer.trim()}
+                        variant="secondary"
+                      >
+                        {submitting ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <Send className="w-4 h-4 mr-1" />
+                        )}
+                        Send Response
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        }
+
+        // Plain text question UI (existing behavior)
+        return (
+          <Card className="bg-yellow-500/5 border-yellow-500/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-yellow-400">
+                <MessageSquare className="w-5 h-5" />
+                Agent Question
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-foreground">{parsed.question}</p>
+              <div className="flex gap-2">
+                <Input
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder="Your response..."
+                  className="bg-background"
+                  onKeyDown={(e) => e.key === "Enter" && submitAnswer()}
+                />
+                <Button
+                  onClick={submitAnswer}
+                  disabled={submitting || !answer.trim()}
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Result */}
       {job.result && (

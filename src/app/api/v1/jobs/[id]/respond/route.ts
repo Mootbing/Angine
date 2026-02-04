@@ -9,6 +9,8 @@ interface RouteParams {
 
 const respondSchema = z.object({
   answer: z.string().min(1).max(10000),
+  editedPlan: z.string().max(50000).optional(),
+  action: z.enum(["approve", "reject", "edit", "respond"]).optional().default("respond"),
 });
 
 /**
@@ -53,8 +55,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Format the response message based on action type
+    const { answer, action, editedPlan } = parsed.data;
+    let responseMessage: string;
+
+    switch (action) {
+      case "approve":
+        responseMessage = `[PLAN APPROVED] ${answer || "User approved the plan."}`;
+        break;
+      case "reject":
+        responseMessage = `[PLAN REJECTED] ${answer}`;
+        break;
+      case "edit":
+        responseMessage = `[PLAN EDITED] User modified the plan:\n\n${editedPlan}\n\nAdditional feedback: ${answer || "None"}`;
+        break;
+      case "respond":
+      default:
+        responseMessage = answer;
+        break;
+    }
+
     // Respond to the job
-    await respondToJob(id, parsed.data.answer);
+    await respondToJob(id, responseMessage);
 
     return successResponse({
       id,

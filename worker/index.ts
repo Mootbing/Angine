@@ -534,10 +534,14 @@ You MUST ask for user approval before EVERY significant action:
 
 ## Your First Response MUST:
 1. Call discover_tools to see what specialized tools are available
-2. Then call ask_user with a brief summary of:
-   - What tools you found that could help
-   - Your proposed approach/plan (3-5 bullet points)
-   - Ask: "Should I proceed with this plan?"
+2. Then call ask_user with your plan formatted as a JSON string:
+
+\`\`\`
+{"type":"plan","plan":"## Proposed Plan\\n\\n1. First step description\\n2. Second step description\\n3. Third step description","question":"Should I proceed with this plan?"}
+\`\`\`
+
+The "plan" field should contain markdown-formatted text with numbered steps.
+The "question" field asks for user approval.
 
 DO NOT execute any actions (fetch_url, run_python, write_file) until the user approves your plan!
 
@@ -548,12 +552,13 @@ DO NOT execute any actions (fetch_url, run_python, write_file) until the user ap
 - **run_python**: Execute Python code for calculations, data processing
 - **read_file**: Read uploaded file attachments
 - **write_file**: Save files as job artifacts
-- **ask_user**: Pause and ask user a question - USE THIS TO GET PLAN APPROVAL
+- **ask_user**: Pause and ask user a question - USE THIS TO GET PLAN APPROVAL (format as JSON for plans)
 - **final_answer**: Return the final result (REQUIRED to complete)
 
 ## Guidelines
 
 - ALWAYS discover tools and ask for approval before executing
+- Format plan approvals as JSON with type, plan, and question fields
 - Keep your plan summary concise (high-level steps only)
 - After approval, execute efficiently
 - Call final_answer when done`;

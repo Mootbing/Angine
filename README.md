@@ -33,7 +33,45 @@ The LLM uses **native tool calling** to decide what to do. No code generation - 
 | `read_file` | Read uploaded file attachments |
 | `write_file` | Save output files as artifacts |
 | `ask_user` | Pause and ask user a question (HITL) |
+| `discover_tools` | Search for specialized MCP tools |
 | `final_answer` | Return the final result |
+
+## Human-in-the-Loop (HITL) Modes
+
+Control how the agent interacts with users during execution:
+
+| Mode | Description |
+|------|-------------|
+| `plan_approval` | Agent presents a plan for approval before executing (default) |
+| `auto_execute` | Agent runs autonomously without asking for approval |
+| `always_ask` | Agent asks for approval before every significant action |
+
+### Plan Approval Flow
+
+When using `plan_approval` mode, the agent:
+
+1. Analyzes the task and discovers available tools
+2. Creates a structured plan and presents it to the user
+3. Waits for user approval, edits, or rejection
+4. Executes only after approval
+
+```
+Agent creates plan → User reviews in dashboard
+                            ↓
+            ┌───────────────┼───────────────┐
+            │               │               │
+         Approve          Edit           Reject
+            │               │               │
+            ↓               ↓               ↓
+    Execute plan    Execute edited    Agent receives
+                       plan           feedback
+```
+
+The dashboard displays plans with full markdown rendering and provides:
+- **Approve** - Accept the plan as-is
+- **Edit** - Modify the plan before execution
+- **Reject** - Decline with feedback
+- **Respond** - Send freeform feedback
 
 ## Tech Stack
 
@@ -93,6 +131,20 @@ curl -X POST http://localhost:3000/api/v1/jobs \
   -d '{"task": "What is 2 + 2?"}'
 ```
 
+### Create a Job with HITL Mode
+
+```bash
+curl -X POST http://localhost:3000/api/v1/jobs \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "Analyze market trends for Q4",
+    "hitl_mode": "plan_approval"
+  }'
+```
+
+Options: `plan_approval` (default), `auto_execute`, `always_ask`
+
 ### With File Attachment
 
 ```bash
@@ -110,6 +162,34 @@ curl -X POST http://localhost:3000/api/v1/jobs \
     "attachments": [{"filename": "data.csv", "public_url": "..."}]
   }'
 ```
+
+### Respond to Agent (HITL)
+
+```bash
+# Approve a plan
+curl -X POST http://localhost:3000/api/v1/jobs/{id}/respond \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"answer": "Looks good", "action": "approve"}'
+
+# Edit a plan
+curl -X POST http://localhost:3000/api/v1/jobs/{id}/respond \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "answer": "Modified step 2",
+    "action": "edit",
+    "editedPlan": "1. Step one\n2. Modified step\n3. Step three"
+  }'
+
+# Reject a plan
+curl -X POST http://localhost:3000/api/v1/jobs/{id}/respond \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"answer": "Please use a different approach", "action": "reject"}'
+```
+
+Actions: `approve`, `reject`, `edit`, `respond` (default)
 
 ### Endpoints
 

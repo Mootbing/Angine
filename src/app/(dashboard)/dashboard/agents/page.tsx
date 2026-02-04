@@ -30,11 +30,11 @@ interface Agent {
 
 const categoryColors: Record<string, string> = {
   web: "from-blue-500 to-cyan-500",
-  data: "from-purple-500 to-pink-500",
+  data: "from-neutral-500 to-pink-500",
   visualization: "from-orange-500 to-amber-500",
   media: "from-red-500 to-rose-500",
-  math: "from-violet-500 to-purple-500",
-  file: "from-indigo-500 to-violet-500",
+  math: "from-neutral-500 to-neutral-500",
+  file: "from-indigo-500 to-neutral-500",
   text: "from-teal-500 to-cyan-500",
   general: "from-zinc-500 to-zinc-600",
 };
@@ -163,7 +163,7 @@ export default function AgentsPage() {
                           v{agent.version}
                         </Badge>
                         {agent.verified ? (
-                          <Badge className="bg-violet-500/10 text-violet-400 border-violet-500/20">
+                          <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
                             <CheckCircle2 className="w-3 h-3 mr-1" />
                             Verified
                           </Badge>

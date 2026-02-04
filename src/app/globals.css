@@ -10,20 +10,20 @@
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 6%;
     --popover-foreground: 0 0% 98%;
-    --primary: 270 70% 60%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
     --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 55%;
-    --accent: 270 70% 60%;
+    --accent: 0 0% 15%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14%;
     --input: 0 0% 14%;
-    --ring: 270 70% 60%;
-    --chart-1: 270 70% 60%;
+    --ring: 0 0% 60%;
+    --chart-1: 142 76% 36%;
     --chart-2: 199 89% 48%;
     --chart-3: 280 65% 60%;
     --chart-4: 43 74% 66%;
@@ -31,12 +31,12 @@
     --radius: 0.625rem;
     --sidebar-background: 0 0% 4%;
     --sidebar-foreground: 0 0% 75%;
-    --sidebar-primary: 270 70% 60%;
-    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 9%;
     --sidebar-accent: 0 0% 10%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 12%;
-    --sidebar-ring: 270 70% 60%;
+    --sidebar-ring: 0 0% 60%;
   }
 }
 
@@ -70,8 +70,8 @@
 }
 
 /* Glow effects */
-.glow-purple {
-  box-shadow: 0 0 20px hsl(270 70% 60% / 0.15), 0 0 40px hsl(270 70% 60% / 0.05);
+.glow-white {
+  box-shadow: 0 0 20px hsl(0 0% 98% / 0.15), 0 0 40px hsl(0 0% 98% / 0.05);
 }
 
 .glow-blue {
@@ -80,7 +80,7 @@
 
 /* Gradient text */
 .gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400;
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-zinc-200 via-white to-zinc-300;
 }
 
 /* Subtle grid pattern */
@@ -128,7 +128,7 @@
 }
 
 .status-waiting_for_user {
-  @apply bg-purple-500/10 text-purple-400 border-purple-500/20;
+  @apply bg-amber-500/10 text-amber-400 border-amber-500/20;
 }
 
 .status-cancelled {

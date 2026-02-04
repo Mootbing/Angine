@@ -18,13 +18,13 @@ export default function Home() {
     <main className="min-h-screen relative overflow-hidden">
       {/* Background effects */}
       <div className="absolute inset-0 grid-pattern opacity-30" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-to-b from-violet-500/10 via-transparent to-transparent blur-3xl" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-to-b from-neutral-500/10 via-transparent to-transparent blur-3xl" />
 
       <div className="relative max-w-6xl mx-auto px-6 py-20">
         {/* Nav */}
         <nav className="flex items-center justify-between mb-20">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-neutral-400 to-neutral-600 flex items-center justify-center">
               <Zap className="w-4 h-4 text-black" />
             </div>
             <span className="font-semibold text-lg">Engine</span>
@@ -85,13 +85,13 @@ export default function Home() {
             title="Job Queue"
             description="Reliable, distributed job processing with priority, retries, and human-in-the-loop support."
             icon={<Layers className="w-5 h-5" />}
-            gradient="from-purple-500 to-pink-500"
+            gradient="from-neutral-500 to-pink-500"
           />
           <FeatureCard
             title="Sandbox Execution"
             description="Secure, isolated Python environments powered by E2B. Execute untrusted agent code safely."
             icon={<Shield className="w-5 h-5" />}
-            gradient="from-violet-500 to-purple-500"
+            gradient="from-neutral-500 to-neutral-500"
           />
         </div>
 
@@ -108,8 +108,8 @@ export default function Home() {
           <Card className="bg-card/50 backdrop-blur border-border/50">
             <CardContent className="p-8">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                  <Terminal className="w-5 h-5 text-violet-400" />
+                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <Terminal className="w-5 h-5 text-green-400" />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold">Quick Start</h2>
@@ -150,7 +150,7 @@ export default function Home() {
         <footer className="mt-24 pt-8 border-t border-border/50">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <div className="w-6 h-6 rounded bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center">
+              <div className="w-6 h-6 rounded bg-gradient-to-br from-neutral-400 to-neutral-600 flex items-center justify-center">
                 <Zap className="w-3 h-3 text-black" />
               </div>
               <span className="text-sm">Engine Platform v1.0.0</span>
@@ -206,7 +206,7 @@ function CodeBlock({ step, title, code }: { step: number; title: string; code: s
   return (
     <div>
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-medium">
+        <div className="w-6 h-6 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-xs font-medium">
           {step}
         </div>
         <span className="text-sm font-medium">{title}</span>

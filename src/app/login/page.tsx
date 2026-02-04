@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -32,6 +32,12 @@ export default function LoginPage() {
           },
         });
         if (error) throw error;
+        // For local dev, auto-confirm is enabled so redirect immediately
+        if (data.session) {
+          window.location.href = "/dashboard";
+          return;
+        }
+        // For production with email confirmation required
         setError("Check your email to confirm your account");
       } else {
         const { error } = await supabase.auth.signInWithPassword({

@@ -44,11 +44,11 @@ interface Job {
 }
 
 const statusConfig: Record<string, { color: string; bg: string; border: string }> = {
-  queued: { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
+  queued: { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/20" },
   running: { color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-  completed: { color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20" },
+  completed: { color: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/20" },
   failed: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
-  waiting_for_user: { color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
+  waiting_for_user: { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/20" },
   cancelled: { color: "text-zinc-400", bg: "bg-zinc-500/10", border: "border-zinc-500/20" },
 };
 
@@ -218,7 +218,7 @@ export default function JobsPage() {
                     <TableCell>
                       <StatusBadge status={job.status} />
                       {job.agent_question && (
-                        <div className="flex items-center gap-1 text-xs text-purple-400 mt-1.5">
+                        <div className="flex items-center gap-1 text-xs text-yellow-400 mt-1.5">
                           <MessageSquare className="w-3 h-3" />
                           <span className="truncate max-w-[200px]">{job.agent_question}</span>
                         </div>

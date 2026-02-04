@@ -159,17 +159,17 @@ export default function KeysPage() {
 
       {/* New Key Display */}
       {newKeyData && (
-        <Alert className="border-violet-500/20 bg-violet-500/5">
-          <ShieldCheck className="h-4 w-4 text-violet-400" />
+        <Alert className="border-green-500/20 bg-green-500/5">
+          <ShieldCheck className="h-4 w-4 text-green-400" />
           <AlertDescription className="space-y-3">
             <div>
-              <p className="font-medium text-violet-400">New API Key Created</p>
+              <p className="font-medium text-green-400">New API Key Created</p>
               <p className="text-sm text-muted-foreground">
                 Copy this key now. You won&apos;t be able to see it again!
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <code className="flex-1 bg-black/30 rounded-lg px-4 py-2.5 font-mono text-sm text-violet-300 break-all">
+              <code className="flex-1 bg-black/30 rounded-lg px-4 py-2.5 font-mono text-sm text-green-300 break-all">
                 {newKeyData.key}
               </code>
               <Button
@@ -266,7 +266,7 @@ export default function KeysPage() {
                   </TableCell>
                   <TableCell>
                     {key.is_active ? (
-                      <Badge className="bg-violet-500/10 text-violet-400 border-violet-500/20">
+                      <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Active
                       </Badge>

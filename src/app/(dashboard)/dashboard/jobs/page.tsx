@@ -2,7 +2,35 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  RefreshCw,
+  AlertCircle,
+  ChevronRight,
+  Clock,
+  MessageSquare,
+  Inbox,
+} from "lucide-react";
 
 interface Job {
   id: string;
@@ -15,12 +43,21 @@ interface Job {
   agent_question: string | null;
 }
 
+const statusConfig: Record<string, { color: string; bg: string; border: string }> = {
+  queued: { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
+  running: { color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
+  completed: { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+  failed: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
+  waiting_for_user: { color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
+  cancelled: { color: "text-zinc-400", bg: "bg-zinc-500/10", border: "border-zinc-500/20" },
+};
+
 export default function JobsPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const fetchJobs = async () => {
     const apiKey = localStorage.getItem("engine_api_key");
@@ -32,7 +69,7 @@ export default function JobsPage() {
 
     try {
       const params = new URLSearchParams();
-      if (statusFilter) params.set("status", statusFilter);
+      if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
 
       const res = await fetch(`/api/v1/jobs?${params}`, {
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -60,107 +97,128 @@ export default function JobsPage() {
   }, [statusFilter]);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Jobs</h1>
-        <div className="flex gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white"
-          >
-            <option value="">All statuses</option>
-            <option value="queued">Queued</option>
-            <option value="running">Running</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-            <option value="waiting_for_user">Waiting for User</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <button
-            onClick={fetchJobs}
-            className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white hover:bg-zinc-700"
-          >
-            Refresh
-          </button>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
+          <p className="text-muted-foreground">View and manage your job queue</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[160px] bg-background">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="queued">Queued</SelectItem>
+              <SelectItem value="running">Running</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="waiting_for_user">Waiting for User</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="icon" onClick={fetchJobs}>
+            <RefreshCw className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6 text-red-400">
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {loading ? (
-        <div className="text-zinc-500">Loading...</div>
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="p-6 space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-12 flex-1" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-16" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : jobs.length === 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500">
-          No jobs found
-        </div>
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="py-16 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+              <Inbox className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-medium mb-1">No jobs found</h3>
+            <p className="text-muted-foreground">Submit a new job from the dashboard to get started.</p>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-zinc-800 text-left text-sm text-zinc-400">
-                <th className="px-4 py-3 font-medium">Task</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Priority</th>
-                <th className="px-4 py-3 font-medium">Created</th>
-                <th className="px-4 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/50 hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Task</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Priority</TableHead>
+                <TableHead className="text-muted-foreground">Created</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {jobs.map((job) => (
-                <tr
+                <TableRow
                   key={job.id}
                   onClick={() => router.push(`/dashboard/jobs/${job.id}`)}
-                  className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                  className="cursor-pointer border-border/50 hover:bg-muted/50"
                 >
-                  <td className="px-4 py-3">
-                    <div className="max-w-md truncate text-sm">{job.task}</div>
-                    <div className="text-xs text-zinc-500 font-mono">{job.id}</div>
-                  </td>
-                  <td className="px-4 py-3">
+                  <TableCell>
+                    <div className="max-w-md">
+                      <div className="truncate font-medium">{job.task}</div>
+                      <div className="text-xs text-muted-foreground font-mono mt-1">{job.id}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <StatusBadge status={job.status} />
                     {job.agent_question && (
-                      <div className="text-xs text-purple-400 mt-1 max-w-xs truncate">
-                        Q: {job.agent_question}
+                      <div className="flex items-center gap-1 text-xs text-purple-400 mt-1.5">
+                        <MessageSquare className="w-3 h-3" />
+                        <span className="truncate max-w-[200px]">{job.agent_question}</span>
                       </div>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-zinc-400">{job.priority}</td>
-                  <td className="px-4 py-3 text-sm text-zinc-400">
-                    {new Date(job.created_at).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-sm text-blue-400">
-                      View →
-                    </span>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{job.priority}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Clock className="w-3.5 h-3.5" />
+                      {new Date(job.created_at).toLocaleString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    queued: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    running: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    completed: "bg-green-500/10 text-green-500 border-green-500/20",
-    failed: "bg-red-500/10 text-red-500 border-red-500/20",
-    waiting_for_user: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-    cancelled: "bg-zinc-500/10 text-zinc-500 border-zinc-500/20",
-  };
+  const config = statusConfig[status] || statusConfig.cancelled;
 
   return (
-    <span className={`inline-block px-2 py-1 text-xs font-medium rounded border ${styles[status] || styles.cancelled}`}>
+    <Badge
+      variant="outline"
+      className={cn("capitalize", config.color, config.bg, config.border)}
+    >
       {status.replace("_", " ")}
-    </span>
+    </Badge>
   );
 }

@@ -9,6 +9,38 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ============================================
+-- Drop Existing Objects (for re-wipes)
+-- ============================================
+
+-- Remove from realtime publication first (ignore errors if not exists)
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime DROP TABLE job_logs;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime DROP TABLE job_queue;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Drop functions
+DROP FUNCTION IF EXISTS claim_next_job(TEXT);
+DROP FUNCTION IF EXISTS match_agents(vector, float, int);
+DROP FUNCTION IF EXISTS recover_stale_jobs(TIMESTAMPTZ);
+DROP FUNCTION IF EXISTS increment_api_key_usage(UUID);
+
+-- Drop tables (in reverse dependency order)
+DROP TABLE IF EXISTS job_attachments CASCADE;
+DROP TABLE IF EXISTS job_artifacts CASCADE;
+DROP TABLE IF EXISTS job_logs CASCADE;
+DROP TABLE IF EXISTS job_queue CASCADE;
+DROP TABLE IF EXISTS workers CASCADE;
+DROP TABLE IF EXISTS agents CASCADE;
+DROP TABLE IF EXISTS api_keys CASCADE;
+
+-- ============================================
 -- API Authentication
 -- ============================================
 

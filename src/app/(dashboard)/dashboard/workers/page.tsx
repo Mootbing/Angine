@@ -1,6 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
+  Server,
+  AlertTriangle,
+  XCircle,
+} from "lucide-react";
 
 interface Worker {
   id: string;
@@ -21,6 +44,18 @@ interface WorkerData {
     dead: number;
   };
 }
+
+const statusConfig: Record<string, { color: string; bg: string; border: string }> = {
+  active: { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+  draining: { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
+  dead: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
+};
+
+const healthConfig: Record<string, { icon: React.ReactNode; color: string }> = {
+  healthy: { icon: <CheckCircle2 className="w-4 h-4" />, color: "text-emerald-400" },
+  warning: { icon: <AlertTriangle className="w-4 h-4" />, color: "text-amber-400" },
+  dead: { icon: <XCircle className="w-4 h-4" />, color: "text-red-400" },
+};
 
 export default function WorkersPage() {
   const [data, setData] = useState<WorkerData | null>(null);
@@ -62,121 +97,157 @@ export default function WorkersPage() {
   }, []);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Workers</h1>
-        <button
-          onClick={fetchWorkers}
-          className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white hover:bg-zinc-700"
-        >
-          Refresh
-        </button>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Workers</h1>
+          <p className="text-muted-foreground">Monitor worker health and status</p>
+        </div>
+        <Button variant="outline" size="icon" onClick={fetchWorkers}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6 text-red-400">
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Summary */}
+      {/* Summary Cards */}
       {data && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <SummaryCard label="Healthy" value={data.summary.healthy} color="green" />
-          <SummaryCard label="Warning" value={data.summary.warning} color="yellow" />
-          <SummaryCard label="Dead" value={data.summary.dead} color="red" />
+        <div className="grid grid-cols-3 gap-4">
+          <SummaryCard
+            label="Healthy"
+            value={data.summary.healthy}
+            icon={<CheckCircle2 className="w-5 h-5" />}
+            gradient="from-emerald-500 to-green-500"
+          />
+          <SummaryCard
+            label="Warning"
+            value={data.summary.warning}
+            icon={<AlertTriangle className="w-5 h-5" />}
+            gradient="from-amber-500 to-orange-500"
+          />
+          <SummaryCard
+            label="Dead"
+            value={data.summary.dead}
+            icon={<XCircle className="w-5 h-5" />}
+            gradient="from-red-500 to-rose-500"
+          />
         </div>
       )}
 
       {loading ? (
-        <div className="text-zinc-500">Loading...</div>
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="p-6 space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-12 flex-1" />
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-6 w-16" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : !data || data.workers.length === 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500">
-          No workers registered
-        </div>
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="py-16 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+              <Server className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-medium mb-1">No workers registered</h3>
+            <p className="text-muted-foreground">Start a worker to begin processing jobs.</p>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-zinc-800 text-left text-sm text-zinc-400">
-                <th className="px-4 py-3 font-medium">Worker ID</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Health</th>
-                <th className="px-4 py-3 font-medium">Active Jobs</th>
-                <th className="px-4 py-3 font-medium">Last Heartbeat</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.workers.map((worker) => (
-                <tr key={worker.id} className="border-b border-zinc-800 last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-mono text-sm">{worker.id}</div>
-                    {worker.hostname && (
-                      <div className="text-xs text-zinc-500">{worker.hostname}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={worker.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <HealthBadge health={worker.health} />
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {worker.active_jobs}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-zinc-400">
-                    {worker.seconds_since_heartbeat}s ago
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/50 hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Worker ID</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Health</TableHead>
+                <TableHead className="text-muted-foreground">Active Jobs</TableHead>
+                <TableHead className="text-muted-foreground">Last Heartbeat</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.workers.map((worker) => {
+                const status = statusConfig[worker.status] || statusConfig.dead;
+                const health = healthConfig[worker.health] || healthConfig.dead;
+
+                return (
+                  <TableRow key={worker.id} className="border-border/50">
+                    <TableCell>
+                      <div className="font-mono text-sm">{worker.id}</div>
+                      {worker.hostname && (
+                        <div className="text-xs text-muted-foreground">{worker.hostname}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn("capitalize", status.color, status.bg, status.border)}
+                      >
+                        {worker.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className={cn("flex items-center gap-2", health.color)}>
+                        {health.icon}
+                        <span className="text-sm capitalize">{worker.health}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{worker.active_jobs}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" />
+                        {worker.seconds_since_heartbeat}s ago
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </div>
   );
 }
 
-function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
-  const colors: Record<string, string> = {
-    green: "text-green-500",
-    yellow: "text-yellow-500",
-    red: "text-red-500",
-  };
-
+function SummaryCard({
+  label,
+  value,
+  icon,
+  gradient,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  gradient: string;
+}) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-      <div className={`text-2xl font-bold ${colors[color]}`}>{value}</div>
-      <div className="text-sm text-zinc-500">{label}</div>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    active: "bg-green-500/10 text-green-500 border-green-500/20",
-    draining: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    dead: "bg-red-500/10 text-red-500 border-red-500/20",
-  };
-
-  return (
-    <span className={`inline-block px-2 py-1 text-xs font-medium rounded border ${styles[status] || styles.dead}`}>
-      {status}
-    </span>
-  );
-}
-
-function HealthBadge({ health }: { health: string }) {
-  const styles: Record<string, string> = {
-    healthy: "bg-green-500",
-    warning: "bg-yellow-500",
-    dead: "bg-red-500",
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <div className={`w-2 h-2 rounded-full ${styles[health]}`} />
-      <span className="text-sm text-zinc-400">{health}</span>
-    </div>
+    <Card className="bg-card/50 backdrop-blur border-border/50">
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-3xl font-bold mt-1">{value}</p>
+          </div>
+          <div className={cn(
+            "w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br text-white",
+            gradient
+          )}>
+            {icon}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

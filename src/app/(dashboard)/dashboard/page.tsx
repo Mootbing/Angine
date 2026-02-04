@@ -2,6 +2,38 @@
 
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Briefcase,
+  Server,
+  Bot,
+  KeyRound,
+  TrendingUp,
+  Clock,
+  Send,
+  Paperclip,
+  X,
+  CheckCircle2,
+  Loader2,
+  AlertCircle,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react";
 
 interface Metrics {
   jobs: {
@@ -23,28 +55,73 @@ interface Metrics {
   };
 }
 
+const availableModels = [
+  { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "Anthropic" },
+  { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
+  { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI" },
+  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
+  { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "Google" },
+  { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
+  { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", provider: "Meta" },
+];
+
 export default function DashboardPage() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
 
-  // Job submission state
   const [taskInput, setTaskInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("anthropic/claude-sonnet-4");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
 
-  const availableModels = [
-    { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "Anthropic" },
-    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
-    { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI" },
-    { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
-    { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "Google" },
-    { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
-    { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", provider: "Meta" },
-  ];
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{
+    filename: string;
+    storage_path: string;
+    public_url: string;
+    mime_type?: string;
+    size_bytes?: number;
+  }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !apiKey) return;
+
+    setIsUploading(true);
+
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/v1/jobs/upload", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "Upload failed");
+        }
+
+        const uploaded = await res.json();
+        setUploadedFiles((prev) => [...prev, uploaded]);
+      }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const submitJob = async (e: FormEvent) => {
     e.preventDefault();
@@ -60,7 +137,11 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ task: taskInput.trim(), model: selectedModel }),
+        body: JSON.stringify({
+          task: taskInput.trim(),
+          model: selectedModel,
+          attachments: uploadedFiles.length > 0 ? uploadedFiles : undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -71,7 +152,8 @@ export default function DashboardPage() {
       const job = await res.json();
       setLastJobId(job.id);
       setTaskInput("");
-      fetchMetrics(); // Refresh metrics
+      setUploadedFiles([]);
+      fetchMetrics();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -101,7 +183,6 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    // Try to load API key from localStorage
     const savedKey = localStorage.getItem("engine_api_key");
     if (savedKey) {
       setApiKey(savedKey);
@@ -117,201 +198,337 @@ export default function DashboardPage() {
     }
   }, [apiKey]);
 
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-
-      {/* API Key Input */}
-      {!metrics && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-6">
-          <label className="block text-sm text-zinc-400 mb-2">
-            Enter your admin API key to view metrics
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="engine_live_..."
-              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
-            />
-            <button
-              onClick={fetchMetrics}
-              className="px-4 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200"
-            >
+  // API Key Input View
+  if (!metrics) {
+    return (
+      <div className="max-w-lg mx-auto mt-20">
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardHeader className="text-center pb-2">
+            <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+              <KeyRound className="w-7 h-7 text-black" />
+            </div>
+            <CardTitle className="text-2xl">Welcome to Engine</CardTitle>
+            <CardDescription>
+              Enter your admin API key to access the dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="apiKey">API Key</Label>
+              <Input
+                id="apiKey"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="engine_live_..."
+                className="bg-background"
+              />
+            </div>
+            <Button onClick={fetchMetrics} className="w-full" size="lg">
               Connect
-            </button>
-          </div>
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-        </div>
-      )}
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">
+          Monitor your agent operations and submit new jobs.
+        </p>
+      </div>
 
       {/* Metrics Grid */}
-      {metrics && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Jobs */}
-          <MetricCard title="Jobs">
-            <div className="text-3xl font-bold mb-2">{metrics.jobs.total}</div>
-            <div className="space-y-1 text-sm">
-              <StatusRow label="Queued" value={metrics.jobs.by_status.queued || 0} color="yellow" />
-              <StatusRow label="Running" value={metrics.jobs.by_status.running || 0} color="blue" />
-              <StatusRow label="Completed" value={metrics.jobs.by_status.completed || 0} color="green" />
-              <StatusRow label="Failed" value={metrics.jobs.by_status.failed || 0} color="red" />
-              <StatusRow label="Waiting" value={metrics.jobs.by_status.waiting_for_user || 0} color="purple" />
-            </div>
-          </MetricCard>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Total Jobs"
+          value={metrics.jobs.total}
+          icon={<Briefcase className="w-5 h-5" />}
+          gradient="from-blue-500 to-cyan-500"
+        >
+          <div className="mt-4 space-y-2">
+            <StatusRow label="Queued" value={metrics.jobs.by_status.queued || 0} color="amber" />
+            <StatusRow label="Running" value={metrics.jobs.by_status.running || 0} color="blue" />
+            <StatusRow label="Completed" value={metrics.jobs.by_status.completed || 0} color="emerald" />
+            <StatusRow label="Failed" value={metrics.jobs.by_status.failed || 0} color="red" />
+            <StatusRow label="Waiting" value={metrics.jobs.by_status.waiting_for_user || 0} color="purple" />
+          </div>
+        </MetricCard>
 
-          {/* Workers */}
-          <MetricCard title="Workers">
-            <div className="text-3xl font-bold mb-2">{metrics.workers.total}</div>
-            <div className="space-y-1 text-sm">
-              <StatusRow label="Active" value={metrics.workers.by_status.active || 0} color="green" />
-              <StatusRow label="Draining" value={metrics.workers.by_status.draining || 0} color="yellow" />
-              <StatusRow label="Dead" value={metrics.workers.by_status.dead || 0} color="red" />
-            </div>
-          </MetricCard>
+        <MetricCard
+          title="Workers"
+          value={metrics.workers.total}
+          icon={<Server className="w-5 h-5" />}
+          gradient="from-purple-500 to-pink-500"
+        >
+          <div className="mt-4 space-y-2">
+            <StatusRow label="Active" value={metrics.workers.by_status.active || 0} color="emerald" />
+            <StatusRow label="Draining" value={metrics.workers.by_status.draining || 0} color="amber" />
+            <StatusRow label="Dead" value={metrics.workers.by_status.dead || 0} color="red" />
+          </div>
+        </MetricCard>
 
-          {/* Agents */}
-          <MetricCard title="Agents">
-            <div className="text-3xl font-bold mb-2">{metrics.agents.total}</div>
-            <div className="space-y-1 text-sm">
-              <StatusRow label="Verified" value={metrics.agents.verified} color="green" />
-              <StatusRow label="Pending" value={metrics.agents.total - metrics.agents.verified} color="yellow" />
-            </div>
-          </MetricCard>
+        <MetricCard
+          title="Agents"
+          value={metrics.agents.total}
+          icon={<Bot className="w-5 h-5" />}
+          gradient="from-emerald-500 to-green-500"
+        >
+          <div className="mt-4 space-y-2">
+            <StatusRow label="Verified" value={metrics.agents.verified} color="emerald" />
+            <StatusRow label="Pending" value={metrics.agents.total - metrics.agents.verified} color="amber" />
+          </div>
+        </MetricCard>
 
-          {/* API Keys */}
-          <MetricCard title="API Keys">
-            <div className="text-3xl font-bold mb-2">{metrics.api_keys.total}</div>
-            <div className="space-y-1 text-sm">
-              <StatusRow label="Active" value={metrics.api_keys.active} color="green" />
-              <StatusRow label="Revoked" value={metrics.api_keys.total - metrics.api_keys.active} color="red" />
-            </div>
-          </MetricCard>
-        </div>
-      )}
+        <MetricCard
+          title="API Keys"
+          value={metrics.api_keys.total}
+          icon={<KeyRound className="w-5 h-5" />}
+          gradient="from-orange-500 to-amber-500"
+        >
+          <div className="mt-4 space-y-2">
+            <StatusRow label="Active" value={metrics.api_keys.active} color="emerald" />
+            <StatusRow label="Revoked" value={metrics.api_keys.total - metrics.api_keys.active} color="red" />
+          </div>
+        </MetricCard>
+      </div>
 
       {/* Job Submission */}
-      {metrics && (
-        <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Submit a Job</h2>
-          <form onSubmit={submitJob} className="space-y-4">
+      <Card className="bg-card/50 backdrop-blur border-border/50">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-black" />
+            </div>
             <div>
-              <textarea
-                value={taskInput}
-                onChange={(e) => setTaskInput(e.target.value)}
-                placeholder="Describe what you want to do in natural language...
+              <CardTitle>Submit a Job</CardTitle>
+              <CardDescription>Describe what you want to accomplish in natural language</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submitJob} className="space-y-4">
+            <Textarea
+              value={taskInput}
+              onChange={(e) => setTaskInput(e.target.value)}
+              placeholder="Describe what you want to do...
 
 Examples:
 • Calculate the first 20 prime numbers
 • Generate a CSV file with random user data
 • Analyze the sentiment of this text: 'I love this product!'"
-                rows={4}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 resize-none"
-              />
-            </div>
+              rows={5}
+              className="bg-background resize-none"
+            />
+
+            {/* Uploaded files */}
+            {uploadedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {uploadedFiles.map((file, index) => (
+                  <Badge
+                    key={index}
+                    variant="secondary"
+                    className="pl-2 pr-1 py-1.5 gap-2"
+                  >
+                    <Paperclip className="w-3 h-3" />
+                    <span className="max-w-[150px] truncate">{file.filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      className="ml-1 hover:bg-muted rounded p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <label className="text-sm text-zinc-400">Model:</label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                {/* File upload */}
+                <Label
+                  htmlFor="file-upload"
+                  className={cn(
+                    "cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                    isUploading && "opacity-50 cursor-not-allowed"
+                  )}
                 >
-                  {availableModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} ({model.provider})
-                    </option>
-                  ))}
-                </select>
+                  {isUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Paperclip className="w-4 h-4" />
+                  )}
+                  {isUploading ? "Uploading..." : "Attach"}
+                  <input
+                    id="file-upload"
+                    type="file"
+                    multiple
+                    onChange={handleFileUpload}
+                    disabled={isUploading}
+                    className="hidden"
+                  />
+                </Label>
+
+                {/* Model selector */}
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger className="w-[200px] bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        <span className="font-medium">{model.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">
+                          {model.provider}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <button
+
+              <Button
                 type="submit"
                 disabled={!taskInput.trim() || isSubmitting}
-                className="px-6 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="min-w-[120px]"
               >
                 {isSubmitting ? (
                   <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Submitting...
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting
                   </>
                 ) : (
-                  "Submit Job"
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Submit
+                  </>
                 )}
-              </button>
+              </Button>
             </div>
+
             {submitError && (
-              <p className="text-red-500 text-sm">{submitError}</p>
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
             )}
+
             {lastJobId && (
-              <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-green-400 text-sm">
+              <Alert className="border-emerald-500/20 bg-emerald-500/10">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <AlertDescription className="text-emerald-400">
                   Job created!{" "}
-                  <button
-                    type="button"
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-emerald-400 hover:text-emerald-300"
                     onClick={() => router.push(`/dashboard/jobs/${lastJobId}`)}
-                    className="underline hover:text-green-300"
                   >
                     View job →
-                  </button>
-                </span>
-              </div>
+                  </Button>
+                </AlertDescription>
+              </Alert>
             )}
           </form>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
       {/* Throughput */}
-      {metrics && (
-        <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Last Hour</h2>
-          <div className="flex gap-8">
-            <div>
-              <div className="text-2xl font-bold">{metrics.jobs.last_hour.created}</div>
-              <div className="text-sm text-zinc-500">Jobs Created</div>
+      <Card className="bg-card/50 backdrop-blur border-border/50">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-white" />
             </div>
             <div>
-              <div className="text-2xl font-bold">{metrics.jobs.last_hour.completed}</div>
-              <div className="text-sm text-zinc-500">Jobs Completed</div>
+              <CardTitle>Last Hour</CardTitle>
+              <CardDescription>Job throughput metrics</CardDescription>
             </div>
           </div>
-        </div>
-      )}
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-8">
+            <div>
+              <div className="text-4xl font-bold">{metrics.jobs.last_hour.created}</div>
+              <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                <Clock className="w-4 h-4" />
+                Jobs Created
+              </div>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-emerald-400">{metrics.jobs.last_hour.completed}</div>
+              <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                <CheckCircle2 className="w-4 h-4" />
+                Jobs Completed
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function MetricCard({ title, children }: { title: string; children: React.ReactNode }) {
+function MetricCard({
+  title,
+  value,
+  icon,
+  gradient,
+  children,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+  gradient: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-      <h3 className="text-sm font-medium text-zinc-400 mb-3">{title}</h3>
-      {children}
-    </div>
+    <Card className="bg-card/50 backdrop-blur border-border/50">
+      <CardContent className="pt-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-3xl font-bold mt-1">{value}</p>
+          </div>
+          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white`}>
+            {icon}
+          </div>
+        </div>
+        {children}
+      </CardContent>
+    </Card>
   );
 }
 
 function StatusRow({ label, value, color }: { label: string; value: number; color: string }) {
-  const colors: Record<string, string> = {
-    green: "bg-green-500",
-    yellow: "bg-yellow-500",
+  const colorClasses: Record<string, string> = {
+    emerald: "bg-emerald-500",
+    amber: "bg-amber-500",
     red: "bg-red-500",
     blue: "bg-blue-500",
     purple: "bg-purple-500",
   };
 
   return (
-    <div className="flex items-center justify-between text-zinc-400">
-      <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full ${colors[color]}`} />
-        <span>{label}</span>
+    <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <div className={`w-2 h-2 rounded-full ${colorClasses[color]}`} />
+        {label}
       </div>
-      <span className="font-medium text-white">{value}</span>
+      <span className="font-medium">{value}</span>
     </div>
   );
 }

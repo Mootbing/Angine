@@ -1,92 +1,166 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Search,
+  Layers,
+  Shield,
+  ArrowRight,
+  Terminal,
+  Zap,
+  Bot,
+  Activity,
+} from "lucide-react";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-zinc-900 to-black">
-      <div className="max-w-5xl mx-auto px-6 py-20">
+    <main className="min-h-screen relative overflow-hidden">
+      {/* Background effects */}
+      <div className="absolute inset-0 grid-pattern opacity-30" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-to-b from-emerald-500/10 via-transparent to-transparent blur-3xl" />
+
+      <div className="relative max-w-6xl mx-auto px-6 py-20">
+        {/* Nav */}
+        <nav className="flex items-center justify-between mb-20">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-black" />
+            </div>
+            <span className="font-semibold text-lg">Engine</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="/api/v1/health" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              API Status
+            </Link>
+            <Button asChild>
+              <Link href="/dashboard">
+                Dashboard
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </div>
+        </nav>
+
         {/* Hero */}
-        <div className="text-center mb-16">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
-            Engine
+        <div className="text-center mb-24">
+          <Badge variant="secondary" className="mb-6">
+            <Activity className="w-3 h-3 mr-1" />
+            v1.0.0 — Now with multi-model support
+          </Badge>
+          <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tight">
+            <span className="gradient-text">Agent Operations</span>
+            <br />
+            <span className="text-foreground">Platform</span>
           </h1>
-          <p className="text-xl text-zinc-400 mb-8">
-            Agent Operations Platform
-          </p>
-          <p className="text-zinc-500 max-w-2xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
             Task discovery, job queue management, and secure sandbox execution
             for AI agents. Build, deploy, and orchestrate intelligent workflows.
           </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button size="lg" asChild className="glow-green">
+              <Link href="/dashboard">
+                <Bot className="w-5 h-5 mr-2" />
+                Open Dashboard
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild>
+              <Link href="#quickstart">
+                <Terminal className="w-5 h-5 mr-2" />
+                View API Docs
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Features */}
-        <div className="grid md:grid-cols-3 gap-6 mb-16">
+        <div className="grid md:grid-cols-3 gap-6 mb-24">
           <FeatureCard
             title="Task Discovery"
-            description="Semantic search over agent registry using vector embeddings. Find the right tools for any task."
-            icon={
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            }
+            description="Semantic search over agent registry using vector embeddings. Find the right tools for any task automatically."
+            icon={<Search className="w-5 h-5" />}
+            gradient="from-blue-500 to-cyan-500"
           />
           <FeatureCard
             title="Job Queue"
-            description="Reliable, distributed job processing with priority, retries, and HITL (human-in-the-loop) support."
-            icon={
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-            }
+            description="Reliable, distributed job processing with priority, retries, and human-in-the-loop support."
+            icon={<Layers className="w-5 h-5" />}
+            gradient="from-purple-500 to-pink-500"
           />
           <FeatureCard
             title="Sandbox Execution"
             description="Secure, isolated Python environments powered by E2B. Execute untrusted agent code safely."
-            icon={
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            }
+            icon={<Shield className="w-5 h-5" />}
+            gradient="from-emerald-500 to-green-500"
           />
         </div>
 
-        {/* Quick Links */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          <Link
-            href="/dashboard"
-            className="px-6 py-3 bg-white text-black font-medium rounded-lg hover:bg-zinc-200 transition-colors text-center"
-          >
-            Open Dashboard
-          </Link>
-          <Link
-            href="/api/v1/health"
-            className="px-6 py-3 border border-zinc-700 text-zinc-300 font-medium rounded-lg hover:border-zinc-500 hover:text-white transition-colors text-center"
-          >
-            API Health Check
-          </Link>
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-24">
+          <StatCard value="7+" label="LLM Models" />
+          <StatCard value="8" label="Built-in Tools" />
+          <StatCard value="<1s" label="Avg Latency" />
+          <StatCard value="99.9%" label="Uptime SLA" />
         </div>
 
-        {/* API Quick Start */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Quick Start</h2>
-          <div className="space-y-4">
-            <CodeBlock
-              title="Create a job"
-              code={`curl -X POST https://your-domain.com/api/v1/jobs \\
+        {/* Quick Start */}
+        <div id="quickstart" className="scroll-mt-20">
+          <Card className="bg-card/50 backdrop-blur border-border/50">
+            <CardContent className="p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                  <Terminal className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold">Quick Start</h2>
+                  <p className="text-sm text-muted-foreground">Get up and running in minutes</p>
+                </div>
+              </div>
+              <div className="space-y-6">
+                <CodeBlock
+                  step={1}
+                  title="Create a job"
+                  code={`curl -X POST https://your-domain.com/api/v1/jobs \\
   -H "Authorization: Bearer engine_live_..." \\
   -H "Content-Type: application/json" \\
-  -d '{"task": "Analyze the sentiment of this text..."}'`}
-            />
-            <CodeBlock
-              title="Check job status"
-              code={`curl https://your-domain.com/api/v1/jobs/{job_id} \\
+  -d '{"task": "Analyze the sentiment of this text...", "model": "anthropic/claude-sonnet-4"}'`}
+                />
+                <CodeBlock
+                  step={2}
+                  title="Check job status"
+                  code={`curl https://your-domain.com/api/v1/jobs/{job_id} \\
   -H "Authorization: Bearer engine_live_..."`}
-            />
-          </div>
+                />
+                <CodeBlock
+                  step={3}
+                  title="Get results"
+                  code={`{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "result": "The sentiment is positive with 94% confidence.",
+  "artifacts": [...]
+}`}
+                />
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Footer */}
-        <footer className="mt-16 text-center text-zinc-600 text-sm">
-          <p>Engine Platform v1.0.0</p>
+        <footer className="mt-24 pt-8 border-t border-border/50">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="w-6 h-6 rounded bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+                <Zap className="w-3 h-3 text-black" />
+              </div>
+              <span className="text-sm">Engine Platform v1.0.0</span>
+            </div>
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
+              <Link href="/api/v1/health" className="hover:text-foreground transition-colors">API Health</Link>
+              <Link href="/dashboard/agents" className="hover:text-foreground transition-colors">Tools</Link>
+            </div>
+          </div>
         </footer>
       </div>
     </main>
@@ -97,27 +171,47 @@ function FeatureCard({
   title,
   description,
   icon,
+  gradient,
 }: {
   title: string;
   description: string;
   icon: React.ReactNode;
+  gradient: string;
 }) {
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 hover:border-zinc-700 transition-colors">
-      <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-400 mb-4">
-        {icon}
-      </div>
-      <h3 className="font-semibold mb-2">{title}</h3>
-      <p className="text-sm text-zinc-500">{description}</p>
-    </div>
+    <Card className="bg-card/50 backdrop-blur border-border/50 hover:border-border transition-all hover:shadow-lg hover:shadow-black/20 group">
+      <CardContent className="p-6">
+        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform`}>
+          {icon}
+        </div>
+        <h3 className="font-semibold text-lg mb-2">{title}</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
+      </CardContent>
+    </Card>
   );
 }
 
-function CodeBlock({ title, code }: { title: string; code: string }) {
+function StatCard({ value, label }: { value: string; label: string }) {
+  return (
+    <Card className="bg-card/30 backdrop-blur border-border/50">
+      <CardContent className="p-6 text-center">
+        <div className="text-3xl font-bold gradient-text mb-1">{value}</div>
+        <div className="text-sm text-muted-foreground">{label}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CodeBlock({ step, title, code }: { step: number; title: string; code: string }) {
   return (
     <div>
-      <p className="text-sm text-zinc-500 mb-2">{title}</p>
-      <pre className="bg-black/50 border border-zinc-800 rounded-lg p-4 overflow-x-auto text-sm text-zinc-300">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-medium">
+          {step}
+        </div>
+        <span className="text-sm font-medium">{title}</span>
+      </div>
+      <pre className="bg-black/50 border border-border/50 rounded-lg p-4 overflow-x-auto text-sm text-muted-foreground font-mono">
         <code>{code}</code>
       </pre>
     </div>

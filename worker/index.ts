@@ -237,9 +237,75 @@ async function discoverTools(task: string, jobId: string): Promise<Tool[]> {
 }
 
 /**
+ * Attachment interface
+ */
+interface Attachment {
+  id: string;
+  filename: string;
+  mime_type: string | null;
+  storage_path: string;
+  public_url: string;
+  size_bytes: number | null;
+}
+
+/**
+ * Fetch attachments for a job
+ */
+async function fetchJobAttachments(jobId: string): Promise<Attachment[]> {
+  const { data, error } = await supabase
+    .from("job_attachments")
+    .select("*")
+    .eq("job_id", jobId);
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data as Attachment[];
+}
+
+/**
+ * Download attachments into sandbox
+ */
+async function downloadAttachmentsToSandbox(
+  sandbox: any,
+  attachments: Attachment[],
+  jobId: string
+): Promise<string[]> {
+  const downloadedPaths: string[] = [];
+
+  for (const attachment of attachments) {
+    try {
+      // Fetch file from public URL
+      const response = await fetch(attachment.public_url);
+      if (!response.ok) {
+        console.warn(`Failed to download ${attachment.filename}: ${response.status}`);
+        continue;
+      }
+
+      const buffer = await response.arrayBuffer();
+      const sandboxPath = `/home/user/attachments/${attachment.filename}`;
+
+      // Create attachments directory if needed
+      await sandbox.commands.run("mkdir -p /home/user/attachments");
+
+      // Write file to sandbox
+      await sandbox.files.write(sandboxPath, new Uint8Array(buffer));
+      downloadedPaths.push(sandboxPath);
+
+      await addLog(jobId, `Downloaded attachment: ${attachment.filename}`, "debug");
+    } catch (err) {
+      console.warn(`Failed to download attachment ${attachment.filename}:`, err);
+    }
+  }
+
+  return downloadedPaths;
+}
+
+/**
  * Build the system prompt with discovered tools
  */
-function buildSystemPrompt(tools: Tool[]): string {
+function buildSystemPrompt(tools: Tool[], attachments: Attachment[] = []): string {
   let prompt = `You are a Python code generator. Generate ONLY executable Python code that accomplishes the user's task.
 
 Rules:
@@ -249,6 +315,18 @@ Rules:
 4. Handle errors gracefully
 5. For file operations, save files to /home/user/
 6. Keep code concise and efficient`;
+
+  // Add attachment information if present
+  if (attachments.length > 0) {
+    prompt += `\n\n## Input Files\nThe user has provided the following files in /home/user/attachments/:\n`;
+    for (const att of attachments) {
+      prompt += `- ${att.filename}`;
+      if (att.mime_type) prompt += ` (${att.mime_type})`;
+      if (att.size_bytes) prompt += ` [${Math.round(att.size_bytes / 1024)}KB]`;
+      prompt += `\n`;
+    }
+    prompt += `\nRead these files from /home/user/attachments/ as needed for the task.`;
+  }
 
   if (tools.length > 0) {
     prompt += `\n\n## Available Tools\nYou have access to these pre-installed libraries. USE THEM when relevant:\n`;
@@ -278,9 +356,10 @@ async function callOpenRouter(
   model: string,
   task: string,
   tools: Tool[],
+  attachments: Attachment[] = [],
   userAnswer?: string | null
 ): Promise<string> {
-  const systemPrompt = buildSystemPrompt(tools);
+  const systemPrompt = buildSystemPrompt(tools, attachments);
 
   const userPrompt = userAnswer
     ? `Previous question was answered: "${userAnswer}"\n\nOriginal task: ${task}\n\nContinue the task with this answer.`
@@ -343,13 +422,19 @@ async function runInSandbox(
     // Step 1: Discover relevant tools using vector search
     const tools = await discoverTools(job.task, job.id);
 
-    // Step 2: Generate code using LLM with tool context
+    // Step 2: Fetch job attachments
+    const attachments = await fetchJobAttachments(job.id);
+    if (attachments.length > 0) {
+      await addLog(job.id, `Found ${attachments.length} attachment(s): ${attachments.map(a => a.filename).join(", ")}`, "info");
+    }
+
+    // Step 3: Generate code using LLM with tool + attachment context
     await addLog(job.id, `Generating code with ${model}...`, "info");
 
-    const code = await callOpenRouter(model, job.task, tools, job.user_answer);
+    const code = await callOpenRouter(model, job.task, tools, attachments, job.user_answer);
     await addLog(job.id, `Generated ${code.length} chars of code`, "debug");
 
-    // Step 3: Create sandbox
+    // Step 4: Create sandbox
     sandbox = await Sandbox.create({
       timeoutMs: job.timeout_seconds * 1000,
     });
@@ -360,7 +445,14 @@ async function runInSandbox(
       throw new Error("Job was cancelled");
     }
 
-    // Step 4: Install packages from discovered tools + common packages
+    // Step 5: Download attachments into sandbox
+    if (attachments.length > 0) {
+      await addLog(job.id, "Downloading attachments to sandbox...", "info");
+      const downloadedPaths = await downloadAttachmentsToSandbox(sandbox, attachments, job.id);
+      await addLog(job.id, `Downloaded ${downloadedPaths.length} file(s) to sandbox`, "info");
+    }
+
+    // Step 6: Install packages from discovered tools + common packages
     await addLog(job.id, "Installing dependencies...", "info");
 
     // Collect all packages to install
@@ -429,7 +521,7 @@ async function runInSandbox(
             variables: { generated_code: code },
             files_created: [],
             conversation_history: [],
-            packages_installed: packages,
+            packages_installed: Array.from(packagesToInstall),
           },
           sandbox_id: null,
           resumed_count: 0,

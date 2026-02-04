@@ -1,6 +1,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  KeyRound,
+  Loader2,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 
 interface ApiKey {
   id: string;
@@ -15,11 +51,20 @@ interface ApiKey {
   total_requests: number;
 }
 
+const allScopes = [
+  "jobs:read",
+  "jobs:write",
+  "jobs:delete",
+  "agents:read",
+  "agents:write",
+  "admin",
+];
+
 export default function KeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newKeyData, setNewKeyData] = useState<{ key: string; id: string } | null>(null);
 
   const fetchKeys = async () => {
@@ -75,147 +120,185 @@ export default function KeysPage() {
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">API Keys</h1>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200"
-        >
-          Create Key
-        </button>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">API Keys</h1>
+          <p className="text-muted-foreground">Manage authentication credentials</p>
+        </div>
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Key
+            </Button>
+          </DialogTrigger>
+          <CreateKeyDialog
+            onClose={() => setShowCreateDialog(false)}
+            onCreated={(data) => {
+              setNewKeyData(data);
+              setShowCreateDialog(false);
+              fetchKeys();
+            }}
+          />
+        </Dialog>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6 text-red-400">
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* New Key Display */}
       {newKeyData && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-6 mb-6">
-          <h3 className="text-green-400 font-medium mb-2">New API Key Created</h3>
-          <p className="text-sm text-zinc-400 mb-4">
-            Copy this key now. You won&apos;t be able to see it again!
-          </p>
-          <div className="flex gap-2">
-            <code className="flex-1 bg-black/50 rounded-lg px-4 py-2 font-mono text-sm text-green-300 break-all">
-              {newKeyData.key}
-            </code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(newKeyData.key);
-                alert("Copied to clipboard!");
-              }}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500"
+        <Alert className="border-emerald-500/20 bg-emerald-500/5">
+          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+          <AlertDescription className="space-y-3">
+            <div>
+              <p className="font-medium text-emerald-400">New API Key Created</p>
+              <p className="text-sm text-muted-foreground">
+                Copy this key now. You won&apos;t be able to see it again!
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-black/30 rounded-lg px-4 py-2.5 font-mono text-sm text-emerald-300 break-all">
+                {newKeyData.key}
+              </code>
+              <Button
+                size="sm"
+                onClick={() => {
+                  copyToClipboard(newKeyData.key);
+                }}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy
+              </Button>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setNewKeyData(null)}
             >
-              Copy
-            </button>
-          </div>
-          <button
-            onClick={() => setNewKeyData(null)}
-            className="mt-4 text-sm text-zinc-400 hover:text-white"
-          >
-            Dismiss
-          </button>
-        </div>
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {loading ? (
-        <div className="text-zinc-500">Loading...</div>
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="p-6 space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-12 flex-1" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-16" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : keys.length === 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500">
-          No API keys found
-        </div>
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="py-16 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+              <KeyRound className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-medium mb-1">No API keys found</h3>
+            <p className="text-muted-foreground">Create an API key to get started.</p>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-zinc-800 text-left text-sm text-zinc-400">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Key</th>
-                <th className="px-4 py-3 font-medium">Scopes</th>
-                <th className="px-4 py-3 font-medium">Usage</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/50 hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Name</TableHead>
+                <TableHead className="text-muted-foreground">Key</TableHead>
+                <TableHead className="text-muted-foreground">Scopes</TableHead>
+                <TableHead className="text-muted-foreground">Usage</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {keys.map((key) => (
-                <tr key={key.id} className="border-b border-zinc-800 last:border-0">
-                  <td className="px-4 py-3">
+                <TableRow key={key.id} className="border-border/50">
+                  <TableCell>
                     <div className="font-medium">{key.name}</div>
                     {key.owner_email && (
-                      <div className="text-xs text-zinc-500">{key.owner_email}</div>
+                      <div className="text-xs text-muted-foreground">{key.owner_email}</div>
                     )}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-sm text-zinc-400">
-                    {key.key_prefix}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {key.scopes.map((scope) => (
-                        <span
-                          key={scope}
-                          className="px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-400 rounded"
-                        >
+                  </TableCell>
+                  <TableCell>
+                    <code className="text-sm text-muted-foreground font-mono">
+                      {key.key_prefix}
+                    </code>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                      {key.scopes.slice(0, 3).map((scope) => (
+                        <Badge key={scope} variant="secondary" className="text-xs">
                           {scope}
-                        </span>
+                        </Badge>
                       ))}
+                      {key.scopes.length > 3 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{key.scopes.length - 3}
+                        </Badge>
+                      )}
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div>{key.total_requests.toLocaleString()} requests</div>
-                    <div className="text-xs text-zinc-500">
-                      {key.rate_limit_rpm} rpm limit
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">{key.total_requests.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {key.rate_limit_rpm} rpm
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
+                  </TableCell>
+                  <TableCell>
                     {key.is_active ? (
-                      <span className="px-2 py-1 text-xs bg-green-500/10 text-green-500 border border-green-500/20 rounded">
+                      <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
                         Active
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="px-2 py-1 text-xs bg-red-500/10 text-red-500 border border-red-500/20 rounded">
+                      <Badge variant="outline" className="text-red-400 border-red-500/20">
+                        <XCircle className="w-3 h-3 mr-1" />
                         Revoked
-                      </span>
+                      </Badge>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
+                  </TableCell>
+                  <TableCell>
                     {key.is_active && (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                         onClick={() => handleRevoke(key.id)}
-                        className="text-sm text-red-400 hover:text-red-300"
                       >
-                        Revoke
-                      </button>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <CreateKeyModal
-          onClose={() => setShowCreateModal(false)}
-          onCreated={(data) => {
-            setNewKeyData(data);
-            setShowCreateModal(false);
-            fetchKeys();
-          }}
-        />
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </div>
   );
 }
 
-function CreateKeyModal({
+function CreateKeyDialog({
   onClose,
   onCreated,
 }: {
@@ -227,15 +310,6 @@ function CreateKeyModal({
   const [scopes, setScopes] = useState<string[]>(["jobs:read", "jobs:write"]);
   const [rateLimit, setRateLimit] = useState("60");
   const [creating, setCreating] = useState(false);
-
-  const allScopes = [
-    "jobs:read",
-    "jobs:write",
-    "jobs:delete",
-    "agents:read",
-    "agents:write",
-    "admin",
-  ];
 
   const toggleScope = (scope: string) => {
     if (scopes.includes(scope)) {
@@ -281,81 +355,83 @@ function CreateKeyModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">Create API Key</h2>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">Name *</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My API Key"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">Owner Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="owner@example.com"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">Scopes</label>
-            <div className="flex flex-wrap gap-2">
-              {allScopes.map((scope) => (
-                <button
-                  key={scope}
-                  onClick={() => toggleScope(scope)}
-                  className={`px-2 py-1 text-xs rounded border ${
-                    scopes.includes(scope)
-                      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                      : "bg-zinc-800 text-zinc-400 border-zinc-700"
-                  }`}
-                >
-                  {scope}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">Rate Limit (requests/minute)</label>
-            <input
-              type="number"
-              value={rateLimit}
-              onChange={(e) => setRateLimit(e.target.value)}
-              min="1"
-              max="10000"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white"
-            />
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Create API Key</DialogTitle>
+        <DialogDescription>
+          Generate a new API key for authentication.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 py-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name *</Label>
+          <Input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My API Key"
+            className="bg-background"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Owner Email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="owner@example.com"
+            className="bg-background"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Scopes</Label>
+          <div className="flex flex-wrap gap-2">
+            {allScopes.map((scope) => (
+              <Badge
+                key={scope}
+                variant={scopes.includes(scope) ? "default" : "outline"}
+                className={cn(
+                  "cursor-pointer transition-colors",
+                  scopes.includes(scope)
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                )}
+                onClick={() => toggleScope(scope)}
+              >
+                {scope}
+              </Badge>
+            ))}
           </div>
         </div>
-
-        <div className="flex justify-end gap-2 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-zinc-400 hover:text-white"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            disabled={creating || !name.trim()}
-            className="px-4 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-50"
-          >
-            {creating ? "Creating..." : "Create"}
-          </button>
+        <div className="space-y-2">
+          <Label htmlFor="rateLimit">Rate Limit (requests/minute)</Label>
+          <Input
+            id="rateLimit"
+            type="number"
+            value={rateLimit}
+            onChange={(e) => setRateLimit(e.target.value)}
+            min="1"
+            max="10000"
+            className="bg-background"
+          />
         </div>
       </div>
-    </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={handleCreate} disabled={creating || !name.trim()}>
+          {creating ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            "Create"
+          )}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

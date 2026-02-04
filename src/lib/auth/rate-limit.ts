@@ -3,15 +3,20 @@ import type { RateLimitResult } from "@/types";
 
 // Lazy initialization of Redis client
 let redis: Redis | null = null;
+let rateLimitDisabled = false;
 
-function getRedis(): Redis {
+function getRedis(): Redis | null {
+  if (rateLimitDisabled) return null;
   if (redis) return redis;
 
-  const url = process.env.UPSTASH_REDIS_URL;
-  const token = process.env.UPSTASH_REDIS_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-  if (!url || !token) {
-    throw new Error("Missing Upstash Redis environment variables");
+  // Validate URL and token are properly configured (not placeholders)
+  if (!url || !token || !url.startsWith("https://") || url.includes("your_")) {
+    console.warn("Upstash Redis not configured - rate limiting disabled");
+    rateLimitDisabled = true;
+    return null;
   }
 
   redis = new Redis({ url, token });
@@ -27,6 +32,12 @@ export async function checkRateLimit(
   limitRpm: number
 ): Promise<RateLimitResult> {
   const client = getRedis();
+
+  // If Redis is not configured, skip rate limiting
+  if (!client) {
+    return { allowed: true, remaining: limitRpm };
+  }
+
   const windowKey = `ratelimit:${keyId}`;
   const now = Date.now();
   const windowStart = now - 60000; // 1 minute window
@@ -88,5 +99,6 @@ export async function checkRateLimit(
  */
 export async function resetRateLimit(keyId: string): Promise<void> {
   const client = getRedis();
+  if (!client) return;
   await client.del(`ratelimit:${keyId}`);
 }

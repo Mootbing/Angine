@@ -8,6 +8,7 @@ const requiredEnvVars = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "E2B_API_KEY",
   "OPENROUTER_API_KEY",
+  "OPENAI_API_KEY",
 ];
 
 for (const envVar of requiredEnvVars) {
@@ -152,14 +153,94 @@ async function executeJob(job: Job) {
 }
 
 /**
- * Call OpenRouter API to generate code
+ * Tool/Agent interface from database
  */
-async function callOpenRouter(
-  model: string,
-  task: string,
-  userAnswer?: string | null
-): Promise<string> {
-  const systemPrompt = `You are a Python code generator. Generate ONLY executable Python code that accomplishes the user's task.
+interface Tool {
+  id: string;
+  name: string;
+  description: string;
+  package_name: string;
+  import_statement: string | null;
+  usage_example: string | null;
+  documentation: string | null;
+}
+
+/**
+ * Generate embedding using OpenAI
+ */
+async function generateEmbedding(text: string): Promise<number[]> {
+  const response = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "text-embedding-3-small",
+      input: text,
+      dimensions: 1536,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI embedding error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.data[0].embedding;
+}
+
+/**
+ * Search for relevant tools using vector similarity
+ */
+async function discoverTools(task: string, jobId: string): Promise<Tool[]> {
+  try {
+    await addLog(jobId, "Searching for relevant tools...", "info");
+
+    // Generate embedding for the task
+    const embedding = await generateEmbedding(task);
+
+    // Query matching agents using vector similarity
+    const { data, error } = await supabase.rpc("match_agents", {
+      query_embedding: embedding,
+      match_threshold: 0.3, // Lower threshold to find more tools
+      match_count: 5,
+    });
+
+    if (error) {
+      console.error("Tool discovery error:", error);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      await addLog(jobId, "No specific tools found, using general capabilities", "debug");
+      return [];
+    }
+
+    // Fetch full tool details
+    const toolIds = data.map((t: any) => t.id);
+    const { data: tools, error: fetchError } = await supabase
+      .from("agents")
+      .select("id, name, description, package_name, import_statement, usage_example, documentation")
+      .in("id", toolIds);
+
+    if (fetchError || !tools) {
+      return [];
+    }
+
+    await addLog(jobId, `Found ${tools.length} relevant tools: ${tools.map((t: Tool) => t.name).join(", ")}`, "info");
+    return tools as Tool[];
+  } catch (err) {
+    console.error("Tool discovery failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Build the system prompt with discovered tools
+ */
+function buildSystemPrompt(tools: Tool[]): string {
+  let prompt = `You are a Python code generator. Generate ONLY executable Python code that accomplishes the user's task.
 
 Rules:
 1. Output ONLY valid Python code - no markdown, no explanations, no code blocks
@@ -167,9 +248,39 @@ Rules:
 3. If you need user input, use: print("__NEED_INPUT__: <your question>") and exit(100)
 4. Handle errors gracefully
 5. For file operations, save files to /home/user/
-6. Keep code concise and efficient
+6. Keep code concise and efficient`;
 
-Common imports you can use: json, csv, math, random, datetime, re, os, sys, urllib, collections, itertools`;
+  if (tools.length > 0) {
+    prompt += `\n\n## Available Tools\nYou have access to these pre-installed libraries. USE THEM when relevant:\n`;
+
+    for (const tool of tools) {
+      prompt += `\n### ${tool.name}\n`;
+      prompt += `Description: ${tool.description}\n`;
+      prompt += `Packages: ${tool.package_name}\n`;
+      if (tool.import_statement) {
+        prompt += `Import:\n${tool.import_statement}\n`;
+      }
+      if (tool.usage_example) {
+        prompt += `Example:\n${tool.usage_example}\n`;
+      }
+    }
+  } else {
+    prompt += `\n\nCommon imports you can use: json, csv, math, random, datetime, re, os, sys, urllib, collections, itertools, requests, pandas, numpy, matplotlib, pillow`;
+  }
+
+  return prompt;
+}
+
+/**
+ * Call OpenRouter API to generate code
+ */
+async function callOpenRouter(
+  model: string,
+  task: string,
+  tools: Tool[],
+  userAnswer?: string | null
+): Promise<string> {
+  const systemPrompt = buildSystemPrompt(tools);
 
   const userPrompt = userAnswer
     ? `Previous question was answered: "${userAnswer}"\n\nOriginal task: ${task}\n\nContinue the task with this answer.`
@@ -229,13 +340,16 @@ async function runInSandbox(
   const model = (job as any).model || "anthropic/claude-sonnet-4";
 
   try {
-    // Generate code using LLM
+    // Step 1: Discover relevant tools using vector search
+    const tools = await discoverTools(job.task, job.id);
+
+    // Step 2: Generate code using LLM with tool context
     await addLog(job.id, `Generating code with ${model}...`, "info");
 
-    const code = await callOpenRouter(model, job.task, job.user_answer);
+    const code = await callOpenRouter(model, job.task, tools, job.user_answer);
     await addLog(job.id, `Generated ${code.length} chars of code`, "debug");
 
-    // Create sandbox
+    // Step 3: Create sandbox
     sandbox = await Sandbox.create({
       timeoutMs: job.timeout_seconds * 1000,
     });
@@ -246,19 +360,40 @@ async function runInSandbox(
       throw new Error("Job was cancelled");
     }
 
-    // Install common packages
+    // Step 4: Install packages from discovered tools + common packages
     await addLog(job.id, "Installing dependencies...", "info");
+
+    // Collect all packages to install
+    const packagesToInstall = new Set<string>();
+    packagesToInstall.add("requests");
+    packagesToInstall.add("pandas");
+    packagesToInstall.add("numpy");
+    packagesToInstall.add("matplotlib");
+    packagesToInstall.add("pillow");
+    packagesToInstall.add("beautifulsoup4");
+    packagesToInstall.add("seaborn");
+    packagesToInstall.add("scipy");
+
+    // Add packages from discovered tools
+    for (const tool of tools) {
+      const pkgs = tool.package_name.split(",").map(p => p.trim());
+      for (const pkg of pkgs) {
+        if (pkg && !pkg.includes("=")) {
+          packagesToInstall.add(pkg);
+        }
+      }
+    }
+
+    // Add any previously discovered packages from job
+    const jobPackages = job.tools_discovered || [];
+    for (const pkg of jobPackages) {
+      packagesToInstall.add(pkg);
+    }
+
     await sandbox.commands.run(
-      "pip install requests pandas numpy matplotlib pillow -q",
+      `pip install ${Array.from(packagesToInstall).join(" ")} -q`,
       { timeoutMs: 120000 }
     );
-
-    // Install any discovered packages
-    const packages = job.tools_discovered || [];
-    if (packages.length > 0) {
-      await addLog(job.id, `Installing: ${packages.join(", ")}`, "info");
-      await sandbox.commands.run(`pip install ${packages.join(" ")} -q`, { timeoutMs: 120000 });
-    }
 
     if (signal.aborted) {
       throw new Error("Job was cancelled");

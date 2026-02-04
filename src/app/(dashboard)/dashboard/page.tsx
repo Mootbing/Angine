@@ -10,9 +10,6 @@ import {
   Server,
   Bot,
   KeyRound,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
   Loader2,
   FlaskConical,
   ArrowRight,
@@ -184,44 +181,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Bottom Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Throughput */}
-        {metrics && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-background" />
-                </div>
-                <div>
-                  <CardTitle>Last Hour</CardTitle>
-                  <CardDescription>Job throughput metrics</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-8">
-                <div>
-                  <div className="text-4xl font-bold">{metrics.jobs.last_hour.created}</div>
-                  <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                    <Clock className="w-4 h-4" />
-                    Jobs Created
-                  </div>
-                </div>
-                <div>
-                  <div className="text-4xl font-bold text-green-500">{metrics.jobs.last_hour.completed}</div>
-                  <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Jobs Completed
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* API Playground Card */}
+      {/* API Playground Card */}
+      <div className="max-w-md">
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">

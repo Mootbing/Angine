@@ -203,12 +203,17 @@ async function executeTool(
         await addLog(ctx.jobId, `Discovering tools for: ${query}`, "info");
 
         try {
+          // Determine API base URL
+          const isLocal = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('127.0.0.1') || process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('localhost');
+          const apiBaseUrl = process.env.ENGINE_API_URL || (isLocal ? 'http://localhost:3000' : 'https://engine.payo.dev');
+          const apiKey = process.env.WORKER_API_KEY || process.env.ENGINE_API_KEY || 'engine_test_local_dev_key_12345';
+
           // Call the discovery API
-          const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('.supabase.co', '')?.includes('localhost') ? 'http://localhost:3000' : 'https://engine.payo.dev'}/api/v1/agents/discover`, {
+          const response = await fetch(`${apiBaseUrl}/api/v1/agents/discover`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${process.env.WORKER_API_KEY || 'internal'}`,
+              "Authorization": `Bearer ${apiKey}`,
             },
             body: JSON.stringify({ task: query, threshold: 0.3, limit: 5 }),
           });

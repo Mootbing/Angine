@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +15,9 @@ import {
   CheckCircle2,
   Clock,
   Package,
+  Search,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 interface Agent {
@@ -26,6 +29,7 @@ interface Agent {
   category?: string;
   verified: boolean;
   created_at: string;
+  similarity?: number;
 }
 
 const categoryColors: Record<string, string> = {
@@ -42,10 +46,21 @@ const categoryColors: Record<string, string> = {
 export default function ToolsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUnverified, setShowUnverified] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
 
-  const fetchAgents = async () => {
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const fetchAgents = useCallback(async () => {
     const apiKey = localStorage.getItem("engine_api_key");
     if (!apiKey) {
       setError("No API key configured. Go to Dashboard to set one.");
@@ -74,16 +89,75 @@ export default function ToolsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAgents();
   }, [showUnverified]);
+
+  const searchAgents = useCallback(async (query: string) => {
+    const apiKey = localStorage.getItem("engine_api_key");
+    if (!apiKey) return;
+
+    setSearching(true);
+    try {
+      const res = await fetch("/api/v1/agents/discover", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ task: query, threshold: 0.2, limit: 20 }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Search failed");
+      }
+
+      const data = await res.json();
+
+      // Fetch full details for discovered agents
+      if (data.agents && data.agents.length > 0) {
+        const detailsRes = await fetch(`/api/v1/agents?verified_only=${!showUnverified}`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+
+        if (detailsRes.ok) {
+          const detailsData = await detailsRes.json();
+          const agentsMap = new Map(detailsData.agents.map((a: Agent) => [a.id, a]));
+
+          const enrichedAgents = data.agents
+            .map((a: any) => {
+              const full = agentsMap.get(a.id);
+              if (full) {
+                return { ...full, similarity: a.similarity };
+              }
+              return null;
+            })
+            .filter(Boolean);
+
+          setAgents(enrichedAgents);
+        }
+      } else {
+        setAgents([]);
+      }
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Search failed");
+    } finally {
+      setSearching(false);
+    }
+  }, [showUnverified]);
+
+  // Fetch or search based on query
+  useEffect(() => {
+    if (debouncedQuery.trim()) {
+      searchAgents(debouncedQuery);
+    } else {
+      fetchAgents();
+    }
+  }, [debouncedQuery, fetchAgents, searchAgents]);
 
   return (
     <div className="space-y-6 animate-fade-in min-w-0">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Tools & MCPs</h1>
           <p className="text-muted-foreground">Browse available MCP servers and capabilities</p>
@@ -98,6 +172,20 @@ export default function ToolsPage() {
             Show unverified
           </Label>
         </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search tools by capability (e.g., 'web browsing', 'file management')..."
+          className="pl-10 bg-background"
+        />
+        {searching && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+        )}
       </div>
 
       {error && (
@@ -130,8 +218,14 @@ export default function ToolsPage() {
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
               <Bot className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-medium mb-1">No agents found</h3>
-            <p className="text-muted-foreground">Register new agents to expand capabilities.</p>
+            <h3 className="text-lg font-medium mb-1">
+              {searchQuery ? "No matching tools found" : "No agents found"}
+            </h3>
+            <p className="text-muted-foreground">
+              {searchQuery
+                ? "Try a different search query or check 'Show unverified'."
+                : "Register new agents to expand capabilities."}
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -159,6 +253,11 @@ export default function ToolsPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {agent.similarity !== undefined && (
+                          <Badge variant="secondary" className="text-xs">
+                            {Math.round(agent.similarity * 100)}% match
+                          </Badge>
+                        )}
                         <Badge variant="secondary" className="text-xs">
                           v{agent.version}
                         </Badge>

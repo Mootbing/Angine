@@ -63,8 +63,9 @@ export interface Agent {
   id: string;
   name: string;
   description: string;
-  package_name: string;
+  mcp_package: string;
   version: string;
+  category?: string;
   embedding: number[] | null;
   verified: boolean;
   verified_at: string | null;

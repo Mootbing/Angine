@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     discoverAgents({ task })
       .then(async (agents) => {
         if (agents.length > 0) {
-          const tools = agents.map((a) => a.package_name);
+          const tools = agents.map((a) => a.mcp_package);
           await setDiscoveredTools(job.id, tools);
           await addJobLog(
             job.id,

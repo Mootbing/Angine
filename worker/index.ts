@@ -153,15 +153,17 @@ async function executeJob(job: Job) {
 }
 
 /**
- * Tool/Agent interface from database
+ * MCP Server interface from database
  */
-interface Tool {
+interface MCPServer {
   id: string;
   name: string;
   description: string;
-  package_name: string;
-  import_statement: string | null;
-  usage_example: string | null;
+  mcp_package: string;
+  mcp_transport: string;
+  mcp_args: string[];
+  mcp_env: Record<string, string>;
+  mcp_tools: Array<{ name: string; description: string }>;
   documentation: string | null;
 }
 
@@ -191,11 +193,11 @@ async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 /**
- * Search for relevant tools using vector similarity
+ * Search for relevant MCP servers using vector similarity
  */
-async function discoverTools(task: string, jobId: string): Promise<Tool[]> {
+async function discoverMCPServers(task: string, jobId: string): Promise<MCPServer[]> {
   try {
-    await addLog(jobId, "Searching for relevant tools...", "info");
+    await addLog(jobId, "Searching for relevant MCP servers...", "info");
 
     // Generate embedding for the task
     const embedding = await generateEmbedding(task);
@@ -203,35 +205,35 @@ async function discoverTools(task: string, jobId: string): Promise<Tool[]> {
     // Query matching agents using vector similarity
     const { data, error } = await supabase.rpc("match_agents", {
       query_embedding: embedding,
-      match_threshold: 0.3, // Lower threshold to find more tools
+      match_threshold: 0.3,
       match_count: 5,
     });
 
     if (error) {
-      console.error("Tool discovery error:", error);
+      console.error("MCP server discovery error:", error);
       return [];
     }
 
     if (!data || data.length === 0) {
-      await addLog(jobId, "No specific tools found, using general capabilities", "debug");
+      await addLog(jobId, "No specific MCP servers found", "debug");
       return [];
     }
 
-    // Fetch full tool details
-    const toolIds = data.map((t: any) => t.id);
-    const { data: tools, error: fetchError } = await supabase
+    // Fetch full MCP server details
+    const serverIds = data.map((t: any) => t.id);
+    const { data: servers, error: fetchError } = await supabase
       .from("agents")
-      .select("id, name, description, package_name, import_statement, usage_example, documentation")
-      .in("id", toolIds);
+      .select("id, name, description, mcp_package, mcp_transport, mcp_args, mcp_env, mcp_tools, documentation")
+      .in("id", serverIds);
 
-    if (fetchError || !tools) {
+    if (fetchError || !servers) {
       return [];
     }
 
-    await addLog(jobId, `Found ${tools.length} relevant tools: ${tools.map((t: Tool) => t.name).join(", ")}`, "info");
-    return tools as Tool[];
+    await addLog(jobId, `Found ${servers.length} relevant MCP servers: ${servers.map((s: MCPServer) => s.name).join(", ")}`, "info");
+    return servers as MCPServer[];
   } catch (err) {
-    console.error("Tool discovery failed:", err);
+    console.error("MCP server discovery failed:", err);
     return [];
   }
 }
@@ -303,9 +305,9 @@ async function downloadAttachmentsToSandbox(
 }
 
 /**
- * Build the system prompt with discovered tools
+ * Build the system prompt with discovered MCP servers
  */
-function buildSystemPrompt(tools: Tool[], attachments: Attachment[] = []): string {
+function buildSystemPrompt(mcpServers: MCPServer[], attachments: Attachment[] = []): string {
   let prompt = `You are a Python code generator. Generate ONLY executable Python code that accomplishes the user's task.
 
 Rules:
@@ -328,23 +330,23 @@ Rules:
     prompt += `\nRead these files from /home/user/attachments/ as needed for the task.`;
   }
 
-  if (tools.length > 0) {
-    prompt += `\n\n## Available Tools\nYou have access to these pre-installed libraries. USE THEM when relevant:\n`;
+  if (mcpServers.length > 0) {
+    prompt += `\n\n## Available MCP Server Tools\nYou have access to these tools from MCP servers:\n`;
 
-    for (const tool of tools) {
-      prompt += `\n### ${tool.name}\n`;
-      prompt += `Description: ${tool.description}\n`;
-      prompt += `Packages: ${tool.package_name}\n`;
-      if (tool.import_statement) {
-        prompt += `Import:\n${tool.import_statement}\n`;
-      }
-      if (tool.usage_example) {
-        prompt += `Example:\n${tool.usage_example}\n`;
+    for (const server of mcpServers) {
+      prompt += `\n### ${server.name}\n`;
+      prompt += `Description: ${server.description}\n`;
+      prompt += `Package: ${server.mcp_package}\n`;
+      if (server.mcp_tools && server.mcp_tools.length > 0) {
+        prompt += `Tools:\n`;
+        for (const tool of server.mcp_tools) {
+          prompt += `  - ${tool.name}: ${tool.description}\n`;
+        }
       }
     }
-  } else {
-    prompt += `\n\nCommon imports you can use: json, csv, math, random, datetime, re, os, sys, urllib, collections, itertools, requests, pandas, numpy, matplotlib, pillow`;
   }
+
+  prompt += `\n\nCommon imports you can use: json, csv, math, random, datetime, re, os, sys, urllib, collections, itertools, requests, pandas, numpy, matplotlib, pillow`;
 
   return prompt;
 }
@@ -363,12 +365,12 @@ interface ChatMessage {
 async function callOpenRouter(
   model: string,
   task: string,
-  tools: Tool[],
+  mcpServers: MCPServer[],
   attachments: Attachment[] = [],
   userAnswer?: string | null,
   conversationHistory?: ChatMessage[]
 ): Promise<{ code: string; messages: ChatMessage[] }> {
-  const systemPrompt = buildSystemPrompt(tools, attachments);
+  const systemPrompt = buildSystemPrompt(mcpServers, attachments);
 
   // Build messages array
   let messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
@@ -444,8 +446,8 @@ async function runInSandbox(
   const model = (job as any).model || "anthropic/claude-sonnet-4";
 
   try {
-    // Step 1: Discover relevant tools using vector search
-    const tools = await discoverTools(job.task, job.id);
+    // Step 1: Discover relevant MCP servers using vector search
+    const mcpServers = await discoverMCPServers(job.task, job.id);
 
     // Step 2: Fetch job attachments
     const attachments = await fetchJobAttachments(job.id);
@@ -471,7 +473,7 @@ async function runInSandbox(
       await addLog(job.id, `Downloaded ${downloadedPaths.length} file(s) to sandbox`, "info");
     }
 
-    // Step 5: Install packages from discovered tools + common packages
+    // Step 5: Install common Python packages
     await addLog(job.id, "Installing dependencies...", "info");
 
     const packagesToInstall = new Set<string>();
@@ -483,20 +485,6 @@ async function runInSandbox(
     packagesToInstall.add("beautifulsoup4");
     packagesToInstall.add("seaborn");
     packagesToInstall.add("scipy");
-
-    for (const tool of tools) {
-      const pkgs = tool.package_name.split(",").map(p => p.trim());
-      for (const pkg of pkgs) {
-        if (pkg && !pkg.includes("=")) {
-          packagesToInstall.add(pkg);
-        }
-      }
-    }
-
-    const jobPackages = job.tools_discovered || [];
-    for (const pkg of jobPackages) {
-      packagesToInstall.add(pkg);
-    }
 
     await sandbox.commands.run(
       `pip install ${Array.from(packagesToInstall).join(" ")} -q`,
@@ -523,7 +511,7 @@ async function runInSandbox(
       // Generate or fix code
       if (attempt === 1) {
         await addLog(job.id, `Generating code with ${model}...`, "info");
-        const result = await callOpenRouter(model, job.task, tools, attachments, job.user_answer);
+        const result = await callOpenRouter(model, job.task, mcpServers, attachments, job.user_answer);
         currentCode = result.code;
         conversationHistory = result.messages;
       } else {
@@ -536,7 +524,7 @@ async function runInSandbox(
         };
         conversationHistory = [...(conversationHistory || []), errorFeedback];
 
-        const result = await callOpenRouter(model, job.task, tools, attachments, job.user_answer, conversationHistory);
+        const result = await callOpenRouter(model, job.task, mcpServers, attachments, job.user_answer, conversationHistory);
         currentCode = result.code;
         conversationHistory = result.messages;
       }

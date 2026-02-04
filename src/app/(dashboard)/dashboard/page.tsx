@@ -204,7 +204,7 @@ export default function DashboardPage() {
       <div className="max-w-lg mx-auto mt-20">
         <Card className="bg-card/50 backdrop-blur border-border/50">
           <CardHeader className="text-center pb-2">
-            <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+            <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center">
               <KeyRound className="w-7 h-7 text-black" />
             </div>
             <CardTitle className="text-2xl">Welcome to Engine</CardTitle>
@@ -241,7 +241,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in min-w-0">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -261,7 +261,7 @@ export default function DashboardPage() {
           <div className="mt-4 space-y-2">
             <StatusRow label="Queued" value={metrics.jobs.by_status.queued || 0} color="amber" />
             <StatusRow label="Running" value={metrics.jobs.by_status.running || 0} color="blue" />
-            <StatusRow label="Completed" value={metrics.jobs.by_status.completed || 0} color="emerald" />
+            <StatusRow label="Completed" value={metrics.jobs.by_status.completed || 0} color="violet" />
             <StatusRow label="Failed" value={metrics.jobs.by_status.failed || 0} color="red" />
             <StatusRow label="Waiting" value={metrics.jobs.by_status.waiting_for_user || 0} color="purple" />
           </div>
@@ -274,7 +274,7 @@ export default function DashboardPage() {
           gradient="from-purple-500 to-pink-500"
         >
           <div className="mt-4 space-y-2">
-            <StatusRow label="Active" value={metrics.workers.by_status.active || 0} color="emerald" />
+            <StatusRow label="Active" value={metrics.workers.by_status.active || 0} color="violet" />
             <StatusRow label="Draining" value={metrics.workers.by_status.draining || 0} color="amber" />
             <StatusRow label="Dead" value={metrics.workers.by_status.dead || 0} color="red" />
           </div>
@@ -284,10 +284,10 @@ export default function DashboardPage() {
           title="Agents"
           value={metrics.agents.total}
           icon={<Bot className="w-5 h-5" />}
-          gradient="from-emerald-500 to-green-500"
+          gradient="from-violet-500 to-purple-500"
         >
           <div className="mt-4 space-y-2">
-            <StatusRow label="Verified" value={metrics.agents.verified} color="emerald" />
+            <StatusRow label="Verified" value={metrics.agents.verified} color="violet" />
             <StatusRow label="Pending" value={metrics.agents.total - metrics.agents.verified} color="amber" />
           </div>
         </MetricCard>
@@ -299,7 +299,7 @@ export default function DashboardPage() {
           gradient="from-orange-500 to-amber-500"
         >
           <div className="mt-4 space-y-2">
-            <StatusRow label="Active" value={metrics.api_keys.active} color="emerald" />
+            <StatusRow label="Active" value={metrics.api_keys.active} color="violet" />
             <StatusRow label="Revoked" value={metrics.api_keys.total - metrics.api_keys.active} color="red" />
           </div>
         </MetricCard>
@@ -309,7 +309,7 @@ export default function DashboardPage() {
       <Card className="bg-card/50 backdrop-blur border-border/50">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-black" />
             </div>
             <div>
@@ -428,13 +428,13 @@ Examples:
             )}
 
             {lastJobId && (
-              <Alert className="border-emerald-500/20 bg-emerald-500/10">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                <AlertDescription className="text-emerald-400">
+              <Alert className="border-violet-500/20 bg-violet-500/10">
+                <CheckCircle2 className="h-4 w-4 text-violet-500" />
+                <AlertDescription className="text-violet-400">
                   Job created!{" "}
                   <Button
                     variant="link"
-                    className="p-0 h-auto text-emerald-400 hover:text-emerald-300"
+                    className="p-0 h-auto text-violet-400 hover:text-violet-300"
                     onClick={() => router.push(`/dashboard/jobs/${lastJobId}`)}
                   >
                     View job →
@@ -469,7 +469,7 @@ Examples:
               </div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-emerald-400">{metrics.jobs.last_hour.completed}</div>
+              <div className="text-4xl font-bold text-violet-400">{metrics.jobs.last_hour.completed}</div>
               <div className="flex items-center gap-2 text-muted-foreground mt-1">
                 <CheckCircle2 className="w-4 h-4" />
                 Jobs Completed
@@ -515,7 +515,7 @@ function MetricCard({
 
 function StatusRow({ label, value, color }: { label: string; value: number; color: string }) {
   const colorClasses: Record<string, string> = {
-    emerald: "bg-emerald-500",
+    violet: "bg-violet-500",
     amber: "bg-amber-500",
     red: "bg-red-500",
     blue: "bg-blue-500",

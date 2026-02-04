@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ interface Job {
 const statusConfig: Record<string, { color: string; bg: string; border: string }> = {
   queued: { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
   running: { color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-  completed: { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+  completed: { color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20" },
   failed: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
   waiting_for_user: { color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
   cancelled: { color: "text-zinc-400", bg: "bg-zinc-500/10", border: "border-zinc-500/20" },
@@ -58,6 +58,23 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftShadow, setShowLeftShadow] = useState(false);
+  const [showRightShadow, setShowRightShadow] = useState(false);
+
+  const updateScrollShadows = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setShowLeftShadow(scrollLeft > 0);
+    setShowRightShadow(scrollLeft + clientWidth < scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    updateScrollShadows();
+    window.addEventListener("resize", updateScrollShadows);
+    return () => window.removeEventListener("resize", updateScrollShadows);
+  }, [updateScrollShadows, jobs]);
 
   const fetchJobs = async () => {
     const apiKey = localStorage.getItem("engine_api_key");
@@ -97,7 +114,7 @@ export default function JobsPage() {
   }, [statusFilter]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in min-w-0">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -155,55 +172,75 @@ export default function JobsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Task</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-                <TableHead className="text-muted-foreground">Priority</TableHead>
-                <TableHead className="text-muted-foreground">Created</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jobs.map((job) => (
-                <TableRow
-                  key={job.id}
-                  onClick={() => router.push(`/dashboard/jobs/${job.id}`)}
-                  className="cursor-pointer border-border/50 hover:bg-muted/50"
-                >
-                  <TableCell>
-                    <div className="max-w-md">
-                      <div className="truncate font-medium">{job.task}</div>
-                      <div className="text-xs text-muted-foreground font-mono mt-1">{job.id}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={job.status} />
-                    {job.agent_question && (
-                      <div className="flex items-center gap-1 text-xs text-purple-400 mt-1.5">
-                        <MessageSquare className="w-3 h-3" />
-                        <span className="truncate max-w-[200px]">{job.agent_question}</span>
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{job.priority}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Clock className="w-3.5 h-3.5" />
-                      {new Date(job.created_at).toLocaleString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </TableCell>
+        <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden relative">
+          {/* Left shadow */}
+          <div
+            className={cn(
+              "absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-card/80 to-transparent pointer-events-none z-10 transition-opacity duration-200",
+              showLeftShadow ? "opacity-100" : "opacity-0"
+            )}
+          />
+          {/* Right shadow */}
+          <div
+            className={cn(
+              "absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card/80 to-transparent pointer-events-none z-10 transition-opacity duration-200",
+              showRightShadow ? "opacity-100" : "opacity-0"
+            )}
+          />
+          <div
+            ref={scrollRef}
+            onScroll={updateScrollShadows}
+            className="overflow-x-auto"
+          >
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border/50 hover:bg-transparent">
+                  <TableHead className="text-muted-foreground min-w-[250px]">Task</TableHead>
+                  <TableHead className="text-muted-foreground min-w-[140px]">Status</TableHead>
+                  <TableHead className="text-muted-foreground min-w-[80px]">Priority</TableHead>
+                  <TableHead className="text-muted-foreground min-w-[180px]">Created</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {jobs.map((job) => (
+                  <TableRow
+                    key={job.id}
+                    onClick={() => router.push(`/dashboard/jobs/${job.id}`)}
+                    className="cursor-pointer border-border/50 hover:bg-muted/50"
+                  >
+                    <TableCell>
+                      <div className="min-w-[250px]">
+                        <div className="truncate font-medium max-w-[300px]">{job.task}</div>
+                        <div className="text-xs text-muted-foreground font-mono mt-1">{job.id}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={job.status} />
+                      {job.agent_question && (
+                        <div className="flex items-center gap-1 text-xs text-purple-400 mt-1.5">
+                          <MessageSquare className="w-3 h-3" />
+                          <span className="truncate max-w-[200px]">{job.agent_question}</span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{job.priority}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground whitespace-nowrap">
+                        <Clock className="w-3.5 h-3.5 shrink-0" />
+                        {new Date(job.created_at).toLocaleString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       )}
     </div>

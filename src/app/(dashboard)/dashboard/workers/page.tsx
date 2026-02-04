@@ -46,13 +46,13 @@ interface WorkerData {
 }
 
 const statusConfig: Record<string, { color: string; bg: string; border: string }> = {
-  active: { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+  active: { color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20" },
   draining: { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
   dead: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
 };
 
 const healthConfig: Record<string, { icon: React.ReactNode; color: string }> = {
-  healthy: { icon: <CheckCircle2 className="w-4 h-4" />, color: "text-emerald-400" },
+  healthy: { icon: <CheckCircle2 className="w-4 h-4" />, color: "text-violet-400" },
   warning: { icon: <AlertTriangle className="w-4 h-4" />, color: "text-amber-400" },
   dead: { icon: <XCircle className="w-4 h-4" />, color: "text-red-400" },
 };
@@ -97,7 +97,7 @@ export default function WorkersPage() {
   }, []);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in min-w-0">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -123,7 +123,7 @@ export default function WorkersPage() {
             label="Healthy"
             value={data.summary.healthy}
             icon={<CheckCircle2 className="w-5 h-5" />}
-            gradient="from-emerald-500 to-green-500"
+            gradient="from-violet-500 to-green-500"
           />
           <SummaryCard
             label="Warning"
@@ -164,6 +164,7 @@ export default function WorkersPage() {
         </Card>
       ) : (
         <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-border/50 hover:bg-transparent">
@@ -215,6 +216,7 @@ export default function WorkersPage() {
               })}
             </TableBody>
           </Table>
+          </div>
         </Card>
       )}
     </div>

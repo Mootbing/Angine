@@ -44,7 +44,7 @@ export default function DashboardLayout({
         {/* Logo */}
         <div className="p-6">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center shadow-lg shadow-violet-500/20 group-hover:shadow-violet-500/40 transition-shadow">
               <Zap className="w-5 h-5 text-black" />
             </div>
             <div>
@@ -77,11 +77,11 @@ export default function DashboardLayout({
                     >
                       <item.icon className={cn(
                         "w-5 h-5",
-                        isActive ? "text-emerald-400" : ""
+                        isActive ? "text-violet-400" : ""
                       )} />
                       <span className="flex-1">{item.name}</span>
                       {isActive && (
-                        <ChevronRight className="w-4 h-4 text-emerald-400" />
+                        <ChevronRight className="w-4 h-4 text-violet-400" />
                       )}
                     </Link>
                   </TooltipTrigger>
@@ -105,7 +105,7 @@ export default function DashboardLayout({
             asChild
           >
             <a href="/api/v1/health" target="_blank" rel="noopener noreferrer">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-2" />
+              <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse mr-2" />
               API Status
               <ExternalLink className="w-3 h-3 ml-auto" />
             </a>
@@ -114,12 +114,12 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 ml-64">
+      <main className="flex-1 ml-64 min-w-0 overflow-x-hidden">
         <div className="min-h-screen">
           {/* Top gradient line */}
-          <div className="h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+          <div className="h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
 
-          <div className="p-8">
+          <div className="p-8 max-w-full">
             {children}
           </div>
         </div>

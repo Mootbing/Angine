@@ -125,7 +125,7 @@ export default function KeysPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in min-w-0">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -159,17 +159,17 @@ export default function KeysPage() {
 
       {/* New Key Display */}
       {newKeyData && (
-        <Alert className="border-emerald-500/20 bg-emerald-500/5">
-          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+        <Alert className="border-violet-500/20 bg-violet-500/5">
+          <ShieldCheck className="h-4 w-4 text-violet-400" />
           <AlertDescription className="space-y-3">
             <div>
-              <p className="font-medium text-emerald-400">New API Key Created</p>
+              <p className="font-medium text-violet-400">New API Key Created</p>
               <p className="text-sm text-muted-foreground">
                 Copy this key now. You won&apos;t be able to see it again!
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <code className="flex-1 bg-black/30 rounded-lg px-4 py-2.5 font-mono text-sm text-emerald-300 break-all">
+              <code className="flex-1 bg-black/30 rounded-lg px-4 py-2.5 font-mono text-sm text-violet-300 break-all">
                 {newKeyData.key}
               </code>
               <Button
@@ -218,6 +218,7 @@ export default function KeysPage() {
         </Card>
       ) : (
         <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-border/50 hover:bg-transparent">
@@ -265,7 +266,7 @@ export default function KeysPage() {
                   </TableCell>
                   <TableCell>
                     {key.is_active ? (
-                      <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                      <Badge className="bg-violet-500/10 text-violet-400 border-violet-500/20">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Active
                       </Badge>
@@ -292,6 +293,7 @@ export default function KeysPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </Card>
       )}
     </div>

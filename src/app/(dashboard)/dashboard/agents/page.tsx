@@ -33,7 +33,7 @@ const categoryColors: Record<string, string> = {
   data: "from-purple-500 to-pink-500",
   visualization: "from-orange-500 to-amber-500",
   media: "from-red-500 to-rose-500",
-  math: "from-emerald-500 to-green-500",
+  math: "from-violet-500 to-purple-500",
   file: "from-indigo-500 to-violet-500",
   text: "from-teal-500 to-cyan-500",
   general: "from-zinc-500 to-zinc-600",
@@ -81,7 +81,7 @@ export default function AgentsPage() {
   }, [showUnverified]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in min-w-0">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -108,7 +108,7 @@ export default function AgentsPage() {
       )}
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
           {[...Array(4)].map((_, i) => (
             <Card key={i} className="bg-card/50 backdrop-blur border-border/50">
               <CardContent className="p-6">
@@ -135,11 +135,11 @@ export default function AgentsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
           {agents.map((agent) => (
             <Card
               key={agent.id}
-              className="bg-card/50 backdrop-blur border-border/50 hover:border-border transition-all group"
+              className="bg-card/50 backdrop-blur border-border/50 hover:border-border transition-all group overflow-hidden"
             >
               <CardContent className="p-6">
                 <div className="flex gap-4">
@@ -150,20 +150,20 @@ export default function AgentsPage() {
                   )}>
                     <Sparkles className="w-6 h-6 text-white" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div className="min-w-0">
                         <h3 className="font-semibold truncate">{agent.name}</h3>
-                        <p className="text-sm text-muted-foreground font-mono truncate">
+                        <p className="text-sm text-muted-foreground font-mono break-all">
                           {agent.package_name}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
                         <Badge variant="secondary" className="text-xs">
                           v{agent.version}
                         </Badge>
                         {agent.verified ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                          <Badge className="bg-violet-500/10 text-violet-400 border-violet-500/20">
                             <CheckCircle2 className="w-3 h-3 mr-1" />
                             Verified
                           </Badge>
@@ -179,8 +179,8 @@ export default function AgentsPage() {
                       {agent.description}
                     </p>
                     <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground/70">
-                      <Package className="w-3 h-3" />
-                      Registered {new Date(agent.created_at).toLocaleDateString()}
+                      <Package className="w-3 h-3 shrink-0" />
+                      <span>Registered {new Date(agent.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                 </div>

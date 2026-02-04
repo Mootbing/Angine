@@ -31,9 +31,20 @@ export default function DashboardPage() {
 
   // Job submission state
   const [taskInput, setTaskInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState("anthropic/claude-sonnet-4");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
+
+  const availableModels = [
+    { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "Anthropic" },
+    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
+    { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI" },
+    { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
+    { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "Google" },
+    { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
+    { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", provider: "Meta" },
+  ];
 
   const submitJob = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,7 +60,7 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ task: taskInput.trim() }),
+        body: JSON.stringify({ task: taskInput.trim(), model: selectedModel }),
       });
 
       if (!res.ok) {
@@ -199,9 +210,20 @@ Examples:
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 resize-none"
               />
             </div>
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-zinc-500">
-                {taskInput.length > 0 && `${taskInput.length} characters`}
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-zinc-400">Model:</label>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                >
+                  {availableModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} ({model.provider})
+                    </option>
+                  ))}
+                </select>
               </div>
               <button
                 type="submit"

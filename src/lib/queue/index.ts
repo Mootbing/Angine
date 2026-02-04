@@ -9,6 +9,7 @@ export async function enqueueJob(params: {
   apiKeyId: string;
   priority?: number;
   timeoutSeconds?: number;
+  model?: string;
 }): Promise<Job> {
   const supabase = getSupabaseAdmin();
 
@@ -19,6 +20,7 @@ export async function enqueueJob(params: {
       api_key_id: params.apiKeyId,
       priority: params.priority ?? 0,
       timeout_seconds: params.timeoutSeconds ?? 300,
+      model: params.model ?? "anthropic/claude-sonnet-4",
     })
     .select()
     .single();

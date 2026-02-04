@@ -79,6 +79,7 @@ export interface Job {
   priority: number;
   timeout_seconds: number;
   status: JobStatus;
+  model: string | null;
   tools_discovered: string[] | null;
   worker_id: string | null;
   execution_state: ExecutionState | null;
@@ -130,6 +131,7 @@ export interface CreateJobRequest {
   task: string;
   priority?: number;
   timeout_seconds?: number;
+  model?: string;
 }
 
 export interface CreateJobResponse {

@@ -5,11 +5,23 @@ import { enqueueJob, listJobs } from "@/lib/queue";
 import { discoverAgents } from "@/lib/discovery";
 import { setDiscoveredTools, addJobLog } from "@/lib/queue";
 
+// Available models for OpenRouter
+const AVAILABLE_MODELS = [
+  "anthropic/claude-sonnet-4",
+  "anthropic/claude-3.5-sonnet",
+  "openai/gpt-4o",
+  "openai/gpt-4o-mini",
+  "google/gemini-2.0-flash-001",
+  "deepseek/deepseek-chat",
+  "meta-llama/llama-3.3-70b-instruct",
+];
+
 // Request validation schema
 const createJobSchema = z.object({
   task: z.string().min(1).max(10000),
   priority: z.number().int().min(0).max(100).optional().default(0),
   timeout_seconds: z.number().int().min(30).max(3600).optional().default(300),
+  model: z.string().optional().default("anthropic/claude-sonnet-4"),
 });
 
 /**
@@ -33,7 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { task, priority, timeout_seconds } = parsed.data;
+    const { task, priority, timeout_seconds, model } = parsed.data;
 
     // Create the job
     const job = await enqueueJob({
@@ -41,6 +53,7 @@ export async function POST(request: NextRequest) {
       apiKeyId: auth.context.keyId,
       priority,
       timeoutSeconds: timeout_seconds,
+      model,
     });
 
     await addJobLog(job.id, `Job created: ${task.substring(0, 100)}...`, "info");

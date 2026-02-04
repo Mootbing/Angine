@@ -6,9 +6,7 @@ import type { Job, ExecutionState, WorkerConfig } from "../src/types";
 const requiredEnvVars = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
-  "E2B_API_KEY",
   "OPENROUTER_API_KEY",
-  "OPENAI_API_KEY",
 ];
 
 for (const envVar of requiredEnvVars) {
@@ -18,7 +16,7 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Supabase client for worker (uses service role key)
+// Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -44,203 +42,462 @@ let running = false;
 let shuttingDown = false;
 const activeJobs = new Map<string, AbortController>();
 
-/**
- * Main worker entry point
- */
-async function main() {
-  console.log(`Worker starting: ${config.workerId}`);
-  console.log(`Concurrency: ${config.concurrency}`);
-  console.log(`Poll interval: ${config.pollInterval}ms`);
+// ============================================
+// Tool Definitions
+// ============================================
 
-  running = true;
-
-  // Register signal handlers
-  process.on("SIGTERM", gracefulShutdown);
-  process.on("SIGINT", gracefulShutdown);
-
-  // Start heartbeat
-  startHeartbeat();
-
-  // Start stale job recovery (runs every 2 minutes)
-  startStaleJobRecovery();
-
-  // Main polling loop
-  await pollLoop();
+interface ToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: "object";
+      properties: Record<string, any>;
+      required?: string[];
+    };
+  };
 }
 
-/**
- * Poll for jobs
- */
-async function pollLoop() {
-  while (running && !shuttingDown) {
-    try {
-      // Only poll if we have capacity
-      if (activeJobs.size < config.concurrency) {
-        const job = await claimNextJob();
-        if (job) {
-          // Execute job in background (non-blocking)
-          executeJob(job);
-        }
-      }
-    } catch (error) {
-      console.error("Poll error:", error);
-    }
-
-    await sleep(config.pollInterval);
-  }
-}
-
-/**
- * Claim the next available job
- */
-async function claimNextJob(): Promise<Job | null> {
-  const { data, error } = await supabase.rpc("claim_next_job", {
-    p_worker_id: config.workerId,
-  });
-
-  if (error) {
-    console.error("Failed to claim job:", error);
-    return null;
-  }
-
-  return data && data.length > 0 ? data[0] : null;
-}
-
-/**
- * Execute a job
- */
-async function executeJob(job: Job) {
-  const controller = new AbortController();
-  activeJobs.set(job.id, controller);
-
-  console.log(`Executing job ${job.id}: ${job.task.substring(0, 50)}...`);
-
-  try {
-    await addLog(job.id, `Worker ${config.workerId} started job`, "info");
-
-    // Run in sandbox
-    const result = await runInSandbox(job, controller.signal);
-
-    if (result.hitlPaused) {
-      // Job is paused for user input
-      await pauseForUserInput(job.id, result.question!, result.executionState!);
-      console.log(`Job ${job.id} paused for user input`);
-    } else if (result.success) {
-      // Job completed successfully
-      await completeJob(job.id, result.result || "");
-      console.log(`Job ${job.id} completed`);
-    } else {
-      // Job failed
-      await failJob(job.id, result.error || "Unknown error");
-      console.log(`Job ${job.id} failed: ${result.error}`);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-
-    if (error instanceof Error && error.name === "AbortError") {
-      // Job was cancelled during shutdown - release it
-      await releaseJob(job.id);
-      console.log(`Job ${job.id} released (worker shutdown)`);
-    } else {
-      // Unexpected error
-      await failJob(job.id, message);
-      console.error(`Job ${job.id} error:`, error);
-    }
-  } finally {
-    activeJobs.delete(job.id);
-    await updateHeartbeat();
-  }
-}
-
-/**
- * MCP Server interface from database
- */
-interface MCPServer {
+interface ToolCall {
   id: string;
-  name: string;
-  description: string;
-  mcp_package: string;
-  mcp_transport: string;
-  mcp_args: string[];
-  mcp_env: Record<string, string>;
-  mcp_tools: Array<{ name: string; description: string }>;
-  documentation: string | null;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
 }
 
-/**
- * Generate embedding using OpenAI
- */
-async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+// Built-in tools the agent can use
+const TOOLS: ToolDefinition[] = [
+  {
+    type: "function",
+    function: {
+      name: "fetch_url",
+      description: "Fetch content from a URL and return it as text. Useful for reading web pages, APIs, or downloading data.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "The URL to fetch" },
+          method: { type: "string", enum: ["GET", "POST", "PUT", "DELETE"], description: "HTTP method (default: GET)" },
+          headers: { type: "object", description: "Optional headers to send" },
+          body: { type: "string", description: "Optional request body for POST/PUT" },
+        },
+        required: ["url"],
+      },
     },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: text,
-      dimensions: 1536,
-    }),
-  });
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_python",
+      description: "Execute Python code and return the output. Use for calculations, data processing, file manipulation, or any computational task.",
+      parameters: {
+        type: "object",
+        properties: {
+          code: { type: "string", description: "Python code to execute" },
+          packages: { type: "array", items: { type: "string" }, description: "Optional pip packages to install first" },
+        },
+        required: ["code"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_file",
+      description: "Read the contents of a file that was uploaded as an attachment.",
+      parameters: {
+        type: "object",
+        properties: {
+          filename: { type: "string", description: "Name of the file to read" },
+        },
+        required: ["filename"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_file",
+      description: "Write content to a file. The file will be saved as a job artifact.",
+      parameters: {
+        type: "object",
+        properties: {
+          filename: { type: "string", description: "Name of the file to create" },
+          content: { type: "string", description: "Content to write to the file" },
+        },
+        required: ["filename", "content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ask_user",
+      description: "Ask the user a question when you need more information to complete the task. The job will pause until the user responds.",
+      parameters: {
+        type: "object",
+        properties: {
+          question: { type: "string", description: "The question to ask the user" },
+        },
+        required: ["question"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "final_answer",
+      description: "Return the final result to the user. Call this when the task is complete.",
+      parameters: {
+        type: "object",
+        properties: {
+          answer: { type: "string", description: "The final answer or result" },
+        },
+        required: ["answer"],
+      },
+    },
+  },
+];
 
-  if (!response.ok) {
-    throw new Error(`OpenAI embedding error: ${response.status}`);
+// ============================================
+// Tool Execution
+// ============================================
+
+interface ToolContext {
+  jobId: string;
+  attachments: Map<string, { content: string; url: string }>;
+  artifacts: Map<string, string>;
+  sandbox: any | null;
+}
+
+async function executeTool(
+  toolName: string,
+  args: Record<string, any>,
+  ctx: ToolContext
+): Promise<{ result?: string; askUser?: string; finalAnswer?: string; error?: string }> {
+  try {
+    switch (toolName) {
+      case "fetch_url": {
+        const { url, method = "GET", headers = {}, body } = args;
+        await addLog(ctx.jobId, `Fetching ${method} ${url}`, "info");
+
+        const response = await fetch(url, {
+          method,
+          headers: headers as Record<string, string>,
+          body: body ? body : undefined,
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        let text: string;
+
+        if (contentType.includes("application/json")) {
+          const json = await response.json();
+          text = JSON.stringify(json, null, 2);
+        } else {
+          text = await response.text();
+        }
+
+        // Truncate if too long
+        if (text.length > 50000) {
+          text = text.substring(0, 50000) + "\n\n[Truncated - content too long]";
+        }
+
+        return { result: `Status: ${response.status}\n\n${text}` };
+      }
+
+      case "run_python": {
+        const { code, packages = [] } = args;
+        await addLog(ctx.jobId, `Running Python code (${code.length} chars)`, "info");
+
+        // Lazy load E2B
+        if (!ctx.sandbox) {
+          const { Sandbox } = await import("e2b");
+          ctx.sandbox = await Sandbox.create({ timeoutMs: 300000 });
+          await addLog(ctx.jobId, `Sandbox created: ${ctx.sandbox.sandboxId}`, "debug");
+
+          // Install common packages
+          await ctx.sandbox.commands.run(
+            "pip install requests pandas numpy matplotlib pillow beautifulsoup4 seaborn scipy -q",
+            { timeoutMs: 120000 }
+          );
+        }
+
+        // Install additional packages if requested
+        if (packages.length > 0) {
+          await ctx.sandbox.commands.run(
+            `pip install ${packages.join(" ")} -q`,
+            { timeoutMs: 60000 }
+          );
+        }
+
+        // Write and execute code
+        await ctx.sandbox.files.write("/home/user/script.py", code);
+        const result = await ctx.sandbox.commands.run(
+          "cd /home/user && python script.py",
+          { timeoutMs: 120000 }
+        );
+
+        let output = result.stdout || "";
+        if (result.stderr) {
+          output += `\n\nStderr:\n${result.stderr}`;
+        }
+        if (result.exitCode !== 0) {
+          output += `\n\nExit code: ${result.exitCode}`;
+        }
+
+        return { result: output || "(No output)" };
+      }
+
+      case "read_file": {
+        const { filename } = args;
+        await addLog(ctx.jobId, `Reading file: ${filename}`, "info");
+
+        const file = ctx.attachments.get(filename);
+        if (!file) {
+          const available = Array.from(ctx.attachments.keys()).join(", ") || "none";
+          return { error: `File not found: ${filename}. Available files: ${available}` };
+        }
+
+        return { result: file.content };
+      }
+
+      case "write_file": {
+        const { filename, content } = args;
+        await addLog(ctx.jobId, `Writing file: ${filename} (${content.length} chars)`, "info");
+
+        ctx.artifacts.set(filename, content);
+        return { result: `File saved: ${filename}` };
+      }
+
+      case "ask_user": {
+        const { question } = args;
+        return { askUser: question };
+      }
+
+      case "final_answer": {
+        const { answer } = args;
+        return { finalAnswer: answer };
+      }
+
+      default:
+        return { error: `Unknown tool: ${toolName}` };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await addLog(ctx.jobId, `Tool error (${toolName}): ${message}`, "error");
+    return { error: message };
+  }
+}
+
+// ============================================
+// Agent Loop
+// ============================================
+
+interface AgentResult {
+  success: boolean;
+  result?: string;
+  error?: string;
+  askUser?: string;
+  executionState?: ExecutionState;
+}
+
+async function runAgentLoop(job: Job, signal: AbortSignal): Promise<AgentResult> {
+  const model = (job as any).model || "anthropic/claude-sonnet-4";
+  const MAX_ITERATIONS = 20;
+
+  // Load attachments
+  const attachments = new Map<string, { content: string; url: string }>();
+  const jobAttachments = await fetchJobAttachments(job.id);
+
+  for (const att of jobAttachments) {
+    try {
+      const response = await fetch(att.public_url);
+      const content = await response.text();
+      attachments.set(att.filename, { content, url: att.public_url });
+      await addLog(job.id, `Loaded attachment: ${att.filename}`, "debug");
+    } catch (err) {
+      await addLog(job.id, `Failed to load attachment: ${att.filename}`, "warn");
+    }
   }
 
-  const data = await response.json();
-  return data.data[0].embedding;
-}
+  // Build context
+  const ctx: ToolContext = {
+    jobId: job.id,
+    attachments,
+    artifacts: new Map(),
+    sandbox: null,
+  };
 
-/**
- * Search for relevant MCP servers using vector similarity
- */
-async function discoverMCPServers(task: string, jobId: string): Promise<MCPServer[]> {
-  try {
-    await addLog(jobId, "Searching for relevant MCP servers...", "info");
+  // Build initial messages
+  const messages: Array<{ role: string; content?: string; tool_calls?: ToolCall[]; tool_call_id?: string; name?: string }> = [];
 
-    // Generate embedding for the task
-    const embedding = await generateEmbedding(task);
+  // System message
+  let systemContent = `You are a helpful assistant that completes tasks using the available tools.
 
-    // Query matching agents using vector similarity
-    const { data, error } = await supabase.rpc("match_agents", {
-      query_embedding: embedding,
-      match_threshold: 0.3,
-      match_count: 5,
+Available tools:
+- fetch_url: Fetch content from URLs (web pages, APIs)
+- run_python: Execute Python code for calculations, data processing, file creation
+- read_file: Read uploaded attachments
+- write_file: Save files as artifacts
+- ask_user: Ask the user for clarification
+- final_answer: Return the final result (MUST be called to complete the task)
+
+Guidelines:
+1. Break complex tasks into steps
+2. Use run_python for any calculations or data processing
+3. Always call final_answer when done
+4. If you need user input, use ask_user`;
+
+  if (attachments.size > 0) {
+    systemContent += `\n\nUploaded files available:\n`;
+    for (const [name] of attachments) {
+      systemContent += `- ${name}\n`;
+    }
+  }
+
+  messages.push({ role: "system", content: systemContent });
+
+  // User task
+  let userMessage = `Task: ${job.task}`;
+  if (job.user_answer) {
+    userMessage += `\n\nUser's answer to your previous question: ${job.user_answer}`;
+  }
+  messages.push({ role: "user", content: userMessage });
+
+  await addLog(job.id, `Starting agent loop with ${model}`, "info");
+
+  // Agent loop
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    if (signal.aborted) {
+      throw new Error("Job was cancelled");
+    }
+
+    await addLog(job.id, `Iteration ${iteration + 1}/${MAX_ITERATIONS}`, "debug");
+
+    // Call LLM
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://engine.payo.dev",
+        "X-Title": "Engine Platform",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        tools: TOOLS,
+        tool_choice: "auto",
+        max_tokens: 4096,
+      }),
     });
 
-    if (error) {
-      console.error("MCP server discovery error:", error);
-      return [];
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
     }
 
-    if (!data || data.length === 0) {
-      await addLog(jobId, "No specific MCP servers found", "debug");
-      return [];
+    const data = await response.json();
+    const assistantMessage = data.choices[0]?.message;
+
+    if (!assistantMessage) {
+      throw new Error("No response from LLM");
     }
 
-    // Fetch full MCP server details
-    const serverIds = data.map((t: any) => t.id);
-    const { data: servers, error: fetchError } = await supabase
-      .from("agents")
-      .select("id, name, description, mcp_package, mcp_transport, mcp_args, mcp_env, mcp_tools, documentation")
-      .in("id", serverIds);
+    // Add assistant message to history
+    messages.push(assistantMessage);
 
-    if (fetchError || !servers) {
-      return [];
+    // Check if there are tool calls
+    const toolCalls: ToolCall[] = assistantMessage.tool_calls || [];
+
+    if (toolCalls.length === 0) {
+      // No tool calls - check if there's content (shouldn't happen with proper tool use)
+      if (assistantMessage.content) {
+        await addLog(job.id, `LLM responded without tool call: ${assistantMessage.content.substring(0, 100)}...`, "warn");
+        return { success: true, result: assistantMessage.content };
+      }
+      throw new Error("LLM returned empty response");
     }
 
-    await addLog(jobId, `Found ${servers.length} relevant MCP servers: ${servers.map((s: MCPServer) => s.name).join(", ")}`, "info");
-    return servers as MCPServer[];
-  } catch (err) {
-    console.error("MCP server discovery failed:", err);
-    return [];
+    // Execute tool calls
+    for (const toolCall of toolCalls) {
+      const toolName = toolCall.function.name;
+      let toolArgs: Record<string, any>;
+
+      try {
+        toolArgs = JSON.parse(toolCall.function.arguments);
+      } catch {
+        toolArgs = {};
+      }
+
+      await addLog(job.id, `Tool call: ${toolName}(${JSON.stringify(toolArgs).substring(0, 100)}...)`, "info");
+
+      const toolResult = await executeTool(toolName, toolArgs, ctx);
+
+      // Handle special results
+      if (toolResult.finalAnswer !== undefined) {
+        // Save any artifacts
+        await saveArtifacts(ctx);
+
+        // Clean up sandbox
+        if (ctx.sandbox) {
+          try { await ctx.sandbox.kill(); } catch {}
+        }
+
+        return { success: true, result: toolResult.finalAnswer };
+      }
+
+      if (toolResult.askUser !== undefined) {
+        // Save state and pause for user input
+        if (ctx.sandbox) {
+          try { await ctx.sandbox.kill(); } catch {}
+        }
+
+        return {
+          success: true,
+          askUser: toolResult.askUser,
+          executionState: {
+            checkpoint: "waiting_for_input",
+            context: {
+              variables: {},
+              files_created: Array.from(ctx.artifacts.keys()),
+              conversation_history: messages,
+              packages_installed: [],
+            },
+            sandbox_id: null,
+            resumed_count: 0,
+            last_checkpoint_at: new Date().toISOString(),
+          },
+        };
+      }
+
+      // Add tool result to messages
+      messages.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        name: toolName,
+        content: toolResult.error || toolResult.result || "OK",
+      });
+    }
   }
+
+  // Max iterations reached
+  if (ctx.sandbox) {
+    try { await ctx.sandbox.kill(); } catch {}
+  }
+
+  return {
+    success: false,
+    error: `Agent reached max iterations (${MAX_ITERATIONS}) without completing the task`,
+  };
 }
 
-/**
- * Attachment interface
- */
+// ============================================
+// Helper Functions
+// ============================================
+
 interface Attachment {
   id: string;
   filename: string;
@@ -250,9 +507,6 @@ interface Attachment {
   size_bytes: number | null;
 }
 
-/**
- * Fetch attachments for a job
- */
 async function fetchJobAttachments(jobId: string): Promise<Attachment[]> {
   const { data, error } = await supabase
     .from("job_attachments")
@@ -266,527 +520,97 @@ async function fetchJobAttachments(jobId: string): Promise<Attachment[]> {
   return data as Attachment[];
 }
 
-/**
- * Download attachments into sandbox
- */
-async function downloadAttachmentsToSandbox(
-  sandbox: any,
-  attachments: Attachment[],
-  jobId: string
-): Promise<string[]> {
-  const downloadedPaths: string[] = [];
-
-  for (const attachment of attachments) {
+async function saveArtifacts(ctx: ToolContext) {
+  for (const [filename, content] of ctx.artifacts) {
     try {
-      // Fetch file from public URL
-      const response = await fetch(attachment.public_url);
-      if (!response.ok) {
-        console.warn(`Failed to download ${attachment.filename}: ${response.status}`);
-        continue;
-      }
+      const storagePath = `artifacts/${ctx.jobId}/${filename}`;
 
-      const buffer = await response.arrayBuffer();
-      const sandboxPath = `/home/user/attachments/${attachment.filename}`;
+      const { error: uploadError } = await supabase.storage
+        .from("job-files")
+        .upload(storagePath, content, { upsert: true });
 
-      // Create attachments directory if needed
-      await sandbox.commands.run("mkdir -p /home/user/attachments");
+      if (uploadError) continue;
 
-      // Write file to sandbox
-      await sandbox.files.write(sandboxPath, new Uint8Array(buffer));
-      downloadedPaths.push(sandboxPath);
+      const { data: urlData } = supabase.storage
+        .from("job-files")
+        .getPublicUrl(storagePath);
 
-      await addLog(jobId, `Downloaded attachment: ${attachment.filename}`, "debug");
+      await supabase.from("job_artifacts").insert({
+        job_id: ctx.jobId,
+        filename,
+        storage_path: storagePath,
+        public_url: urlData.publicUrl,
+        size_bytes: content.length,
+      });
+
+      await addLog(ctx.jobId, `Saved artifact: ${filename}`, "info");
     } catch (err) {
-      console.warn(`Failed to download attachment ${attachment.filename}:`, err);
+      await addLog(ctx.jobId, `Failed to save artifact: ${filename}`, "warn");
     }
   }
-
-  return downloadedPaths;
 }
 
-/**
- * Build the system prompt with discovered MCP servers
- */
-function buildSystemPrompt(mcpServers: MCPServer[], attachments: Attachment[] = []): string {
-  let prompt = `You are a Python code generator. Generate ONLY executable Python code that accomplishes the user's task.
+// ============================================
+// Job Execution
+// ============================================
 
-Rules:
-1. Output ONLY valid Python code - no markdown, no explanations, no code blocks
-2. Print the final result using print()
-3. If you need user input, use: print("__NEED_INPUT__: <your question>") and exit(100)
-4. Handle errors gracefully
-5. For file operations, save files to /home/user/
-6. Keep code concise and efficient`;
+async function executeJob(job: Job) {
+  const controller = new AbortController();
+  activeJobs.set(job.id, controller);
 
-  // Add attachment information if present
-  if (attachments.length > 0) {
-    prompt += `\n\n## Input Files\nThe user has provided the following files in /home/user/attachments/:\n`;
-    for (const att of attachments) {
-      prompt += `- ${att.filename}`;
-      if (att.mime_type) prompt += ` (${att.mime_type})`;
-      if (att.size_bytes) prompt += ` [${Math.round(att.size_bytes / 1024)}KB]`;
-      prompt += `\n`;
+  console.log(`Executing job ${job.id}: ${job.task.substring(0, 50)}...`);
+
+  try {
+    await addLog(job.id, `Worker ${config.workerId} started job`, "info");
+
+    const result = await runAgentLoop(job, controller.signal);
+
+    if (result.askUser) {
+      // Job is paused for user input
+      await pauseForUserInput(job.id, result.askUser, result.executionState!);
+      console.log(`Job ${job.id} paused for user input`);
+    } else if (result.success) {
+      // Job completed
+      await completeJob(job.id, result.result || "");
+      console.log(`Job ${job.id} completed`);
+    } else {
+      // Job failed
+      await failJob(job.id, result.error || "Unknown error");
+      console.log(`Job ${job.id} failed: ${result.error}`);
     }
-    prompt += `\nRead these files from /home/user/attachments/ as needed for the task.`;
-  }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
 
-  if (mcpServers.length > 0) {
-    prompt += `\n\n## Available MCP Server Tools\nYou have access to these tools from MCP servers:\n`;
-
-    for (const server of mcpServers) {
-      prompt += `\n### ${server.name}\n`;
-      prompt += `Description: ${server.description}\n`;
-      prompt += `Package: ${server.mcp_package}\n`;
-      if (server.mcp_tools && server.mcp_tools.length > 0) {
-        prompt += `Tools:\n`;
-        for (const tool of server.mcp_tools) {
-          prompt += `  - ${tool.name}: ${tool.description}\n`;
-        }
-      }
+    if (error instanceof Error && error.name === "AbortError") {
+      await releaseJob(job.id);
+      console.log(`Job ${job.id} released (worker shutdown)`);
+    } else {
+      await failJob(job.id, message);
+      console.error(`Job ${job.id} error:`, error);
     }
+  } finally {
+    activeJobs.delete(job.id);
+    await updateHeartbeat();
   }
-
-  prompt += `\n\nCommon imports you can use: json, csv, math, random, datetime, re, os, sys, urllib, collections, itertools, requests, pandas, numpy, matplotlib, pillow`;
-
-  return prompt;
 }
 
-/**
- * Message for conversation history in code generation
- */
-interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
+// ============================================
+// Job Queue Management
+// ============================================
 
-/**
- * Call OpenRouter API to generate code
- */
-async function callOpenRouter(
-  model: string,
-  task: string,
-  mcpServers: MCPServer[],
-  attachments: Attachment[] = [],
-  userAnswer?: string | null,
-  conversationHistory?: ChatMessage[]
-): Promise<{ code: string; messages: ChatMessage[] }> {
-  const systemPrompt = buildSystemPrompt(mcpServers, attachments);
-
-  // Build messages array
-  let messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
-
-  if (conversationHistory && conversationHistory.length > 0) {
-    // Continue from existing conversation (for retries)
-    messages = [...messages, ...conversationHistory];
-  } else {
-    // Initial code generation
-    const userPrompt = userAnswer
-      ? `Previous question was answered: "${userAnswer}"\n\nOriginal task: ${task}\n\nContinue the task with this answer.`
-      : `Task: ${task}\n\nGenerate Python code to accomplish this task.`;
-    messages.push({ role: "user", content: userPrompt });
-  }
-
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "HTTP-Referer": "https://engine.dev",
-      "X-Title": "Engine Platform",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.7,
-      max_tokens: 2000,
-    }),
+async function claimNextJob(): Promise<Job | null> {
+  const { data, error } = await supabase.rpc("claim_next_job", {
+    p_worker_id: config.workerId,
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+  if (error) {
+    console.error("Failed to claim job:", error);
+    return null;
   }
 
-  const data = await response.json();
-  let code = data.choices[0]?.message?.content || "";
-
-  // Clean up code - remove markdown code blocks if present
-  code = code.replace(/^```python\n?/gm, "").replace(/^```\n?/gm, "").trim();
-
-  // Return updated conversation history (excluding system prompt for storage)
-  const updatedHistory: ChatMessage[] = conversationHistory
-    ? [...conversationHistory, { role: "assistant", content: code }]
-    : [
-        { role: "user", content: messages[1].content },
-        { role: "assistant", content: code },
-      ];
-
-  return { code, messages: updatedHistory };
+  return data && data.length > 0 ? data[0] : null;
 }
 
-/**
- * Run job in E2B sandbox with automatic retry on code errors
- */
-async function runInSandbox(
-  job: Job,
-  signal: AbortSignal
-): Promise<{
-  success: boolean;
-  result?: string;
-  error?: string;
-  hitlPaused?: boolean;
-  question?: string;
-  executionState?: ExecutionState;
-}> {
-  const { Sandbox } = await import("e2b");
-
-  let sandbox: InstanceType<typeof Sandbox> | null = null;
-  const HITL_EXIT_CODE = 100;
-  const MAX_RETRIES = 5; // Max attempts to fix code errors
-  const model = (job as any).model || "anthropic/claude-sonnet-4";
-
-  try {
-    // Step 1: Discover relevant MCP servers using vector search
-    const mcpServers = await discoverMCPServers(job.task, job.id);
-
-    // Step 2: Fetch job attachments
-    const attachments = await fetchJobAttachments(job.id);
-    if (attachments.length > 0) {
-      await addLog(job.id, `Found ${attachments.length} attachment(s): ${attachments.map(a => a.filename).join(", ")}`, "info");
-    }
-
-    // Step 3: Create sandbox (reuse for all retries)
-    sandbox = await Sandbox.create({
-      timeoutMs: job.timeout_seconds * 1000,
-    });
-
-    await addLog(job.id, `Sandbox created: ${sandbox.sandboxId}`, "debug");
-
-    if (signal.aborted) {
-      throw new Error("Job was cancelled");
-    }
-
-    // Step 4: Download attachments into sandbox
-    if (attachments.length > 0) {
-      await addLog(job.id, "Downloading attachments to sandbox...", "info");
-      const downloadedPaths = await downloadAttachmentsToSandbox(sandbox, attachments, job.id);
-      await addLog(job.id, `Downloaded ${downloadedPaths.length} file(s) to sandbox`, "info");
-    }
-
-    // Step 5: Install common Python packages
-    await addLog(job.id, "Installing dependencies...", "info");
-
-    const packagesToInstall = new Set<string>();
-    packagesToInstall.add("requests");
-    packagesToInstall.add("pandas");
-    packagesToInstall.add("numpy");
-    packagesToInstall.add("matplotlib");
-    packagesToInstall.add("pillow");
-    packagesToInstall.add("beautifulsoup4");
-    packagesToInstall.add("seaborn");
-    packagesToInstall.add("scipy");
-
-    await sandbox.commands.run(
-      `pip install ${Array.from(packagesToInstall).join(" ")} -q`,
-      { timeoutMs: 120000 }
-    );
-
-    if (signal.aborted) {
-      throw new Error("Job was cancelled");
-    }
-
-    // Step 6: Code generation and execution loop with retries
-    let conversationHistory: ChatMessage[] | undefined;
-    let currentCode = "";
-    let attempt = 0;
-    let lastError = "";
-
-    while (attempt < MAX_RETRIES) {
-      attempt++;
-
-      if (signal.aborted) {
-        throw new Error("Job was cancelled");
-      }
-
-      // Generate or fix code
-      if (attempt === 1) {
-        await addLog(job.id, `Generating code with ${model}...`, "info");
-        const result = await callOpenRouter(model, job.task, mcpServers, attachments, job.user_answer);
-        currentCode = result.code;
-        conversationHistory = result.messages;
-      } else {
-        await addLog(job.id, `Attempt ${attempt}/${MAX_RETRIES}: Asking ${model} to fix the error...`, "info");
-
-        // Add error feedback to conversation
-        const errorFeedback: ChatMessage = {
-          role: "user",
-          content: `The code failed with the following error:\n\n\`\`\`\n${lastError}\n\`\`\`\n\nPlease fix the code to handle this error. Output ONLY the corrected Python code, no explanations.`,
-        };
-        conversationHistory = [...(conversationHistory || []), errorFeedback];
-
-        const result = await callOpenRouter(model, job.task, mcpServers, attachments, job.user_answer, conversationHistory);
-        currentCode = result.code;
-        conversationHistory = result.messages;
-      }
-
-      await addLog(job.id, `Generated ${currentCode.length} chars of code (attempt ${attempt})`, "debug");
-
-      // Write and execute the code
-      await sandbox.files.write("/home/user/task.py", currentCode);
-      await addLog(job.id, `Executing code (attempt ${attempt})...`, "info");
-
-      let stdout = "";
-      let stderr = "";
-
-      const execution = await sandbox.commands.run(
-        "cd /home/user && python task.py",
-        {
-          timeoutMs: job.timeout_seconds * 1000,
-          onStdout: (data) => {
-            stdout += data;
-            addLog(job.id, data.trim(), "info").catch(() => {});
-          },
-          onStderr: (data) => {
-            stderr += data;
-            addLog(job.id, data.trim(), "warn").catch(() => {});
-          },
-        }
-      );
-
-      // Check for HITL pause
-      if (execution.exitCode === HITL_EXIT_CODE || execution.stdout.includes("__NEED_INPUT__:")) {
-        const match = execution.stdout.match(/__NEED_INPUT__:\s*(.+)/);
-        const question = match ? match[1].trim() : "The agent needs more information";
-
-        await collectArtifacts(sandbox, job.id);
-
-        return {
-          success: true,
-          hitlPaused: true,
-          question,
-          executionState: {
-            checkpoint: "waiting_for_input",
-            context: {
-              variables: { generated_code: currentCode },
-              files_created: [],
-              conversation_history: conversationHistory || [],
-              packages_installed: Array.from(packagesToInstall),
-            },
-            sandbox_id: null,
-            resumed_count: 0,
-            last_checkpoint_at: new Date().toISOString(),
-          },
-        };
-      }
-
-      // Check for success
-      if (execution.exitCode === 0) {
-        await collectArtifacts(sandbox, job.id);
-        const result = stdout.trim() || "Task completed successfully (no output)";
-
-        if (attempt > 1) {
-          await addLog(job.id, `Code succeeded after ${attempt} attempts`, "info");
-        }
-
-        return { success: true, result };
-      }
-
-      // Execution failed - prepare for retry
-      lastError = stderr || `Process exited with code ${execution.exitCode}`;
-
-      // Include partial stdout in error context if helpful
-      if (stdout.trim()) {
-        lastError = `stdout (partial output before error):\n${stdout.trim()}\n\nstderr:\n${lastError}`;
-      }
-
-      await addLog(job.id, `Code execution failed (attempt ${attempt}/${MAX_RETRIES}): ${stderr.substring(0, 200)}...`, "warn");
-
-      // If this was the last attempt, return failure
-      if (attempt >= MAX_RETRIES) {
-        await addLog(job.id, `Max retries (${MAX_RETRIES}) reached, job failed`, "error");
-        return {
-          success: false,
-          error: `Code failed after ${MAX_RETRIES} attempts. Last error:\n${lastError}`,
-        };
-      }
-
-      // Continue to next retry attempt
-    }
-
-    // Should not reach here, but just in case
-    return {
-      success: false,
-      error: "Unexpected end of retry loop",
-    };
-  } finally {
-    if (sandbox) {
-      try {
-        await sandbox.kill();
-      } catch {}
-    }
-  }
-}
-
-/**
- * Build agent runner script
- */
-function buildAgentScript(job: Job): string {
-  const stateJson = job.execution_state ? JSON.stringify(job.execution_state) : "None";
-  const userAnswer = job.user_answer ? JSON.stringify(job.user_answer) : "None";
-
-  return `
-import json
-import sys
-
-RESTORED_STATE = ${stateJson}
-USER_ANSWER = ${userAnswer}
-TASK = ${JSON.stringify(job.task)}
-TOOLS = ${JSON.stringify(job.tools_discovered || [])}
-
-class CheckpointableAgent:
-    def __init__(self, restored_state=None):
-        if restored_state:
-            self.restore(restored_state)
-        else:
-            self.state = {}
-            self.current_checkpoint = "start"
-
-    def checkpoint(self):
-        return {"variables": self.state, "checkpoint": self.current_checkpoint}
-
-    def restore(self, state):
-        self.state = state.get("variables", {})
-        self.current_checkpoint = state.get("checkpoint", "start")
-
-    def request_user_input(self, question):
-        print(f"__HITL_REQUEST__:{json.dumps({'question': question})}")
-        print(f"__CHECKPOINT__:{json.dumps(self.checkpoint())}")
-        sys.exit(100)
-
-    def emit_result(self, result):
-        print(f"__RESULT__:{json.dumps({'result': str(result)})}")
-
-class DefaultAgent(CheckpointableAgent):
-    def run(self, task, tools, user_answer=None):
-        if user_answer:
-            self.state["user_answer"] = user_answer
-
-        try:
-            result = f"Executed task: {task}"
-            if tools:
-                result += f"\\nUsing tools: {', '.join(tools)}"
-            self.emit_result(result)
-        except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
-
-if __name__ == "__main__":
-    agent = DefaultAgent(RESTORED_STATE)
-    agent.run(TASK, TOOLS, USER_ANSWER)
-`;
-}
-
-/**
- * Parse HITL output
- */
-function parseHitlOutput(stdout: string): { question: string; state: ExecutionState } {
-  const lines = stdout.split("\n");
-  let question = "";
-  let state: ExecutionState = {
-    checkpoint: "unknown",
-    context: {
-      variables: {},
-      files_created: [],
-      conversation_history: [],
-      packages_installed: [],
-    },
-    sandbox_id: null,
-    resumed_count: 0,
-    last_checkpoint_at: new Date().toISOString(),
-  };
-
-  for (const line of lines) {
-    if (line.startsWith("__HITL_REQUEST__:")) {
-      try {
-        const data = JSON.parse(line.substring("__HITL_REQUEST__:".length));
-        question = data.question;
-      } catch {}
-    }
-    if (line.startsWith("__CHECKPOINT__:")) {
-      try {
-        const data = JSON.parse(line.substring("__CHECKPOINT__:".length));
-        state = {
-          ...state,
-          checkpoint: data.checkpoint || "unknown",
-          context: { ...state.context, variables: data.variables || {} },
-        };
-      } catch {}
-    }
-  }
-
-  return { question, state };
-}
-
-/**
- * Parse agent result
- */
-function parseAgentResult(stdout: string): string {
-  const lines = stdout.split("\n");
-
-  for (const line of lines) {
-    if (line.startsWith("__RESULT__:")) {
-      try {
-        const data = JSON.parse(line.substring("__RESULT__:".length));
-        return data.result;
-      } catch {}
-    }
-  }
-
-  return stdout;
-}
-
-/**
- * Collect artifacts from sandbox
- */
-async function collectArtifacts(sandbox: any, jobId: string) {
-  const ARTIFACT_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".csv", ".json", ".pdf", ".html", ".txt", ".md"];
-
-  try {
-    const files = await sandbox.files.list("/home/user");
-
-    for (const file of files) {
-      const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-      if (!ARTIFACT_EXTENSIONS.includes(ext)) continue;
-
-      try {
-        const content = await sandbox.files.read(`/home/user/${file.name}`);
-        const storagePath = `artifacts/${jobId}/${file.name}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("job-files")
-          .upload(storagePath, content, { upsert: true });
-
-        if (uploadError) continue;
-
-        const { data: urlData } = supabase.storage
-          .from("job-files")
-          .getPublicUrl(storagePath);
-
-        await supabase.from("job_artifacts").insert({
-          job_id: jobId,
-          filename: file.name,
-          storage_path: storagePath,
-          public_url: urlData.publicUrl,
-          size_bytes: typeof content === "string" ? content.length : content.byteLength,
-        });
-      } catch {}
-    }
-  } catch {}
-}
-
-/**
- * Update job status helpers
- */
 async function completeJob(jobId: string, result: string) {
   await supabase
     .from("job_queue")
@@ -832,9 +656,6 @@ async function pauseForUserInput(jobId: string, question: string, state: Executi
     .eq("id", jobId);
 }
 
-/**
- * Add job log
- */
 async function addLog(jobId: string, message: string, level: string) {
   await supabase.from("job_logs").insert({
     job_id: jobId,
@@ -843,9 +664,43 @@ async function addLog(jobId: string, message: string, level: string) {
   });
 }
 
-/**
- * Heartbeat
- */
+// ============================================
+// Worker Lifecycle
+// ============================================
+
+async function main() {
+  console.log(`Worker starting: ${config.workerId}`);
+  console.log(`Concurrency: ${config.concurrency}`);
+  console.log(`Poll interval: ${config.pollInterval}ms`);
+
+  running = true;
+
+  process.on("SIGTERM", gracefulShutdown);
+  process.on("SIGINT", gracefulShutdown);
+
+  startHeartbeat();
+  startStaleJobRecovery();
+
+  await pollLoop();
+}
+
+async function pollLoop() {
+  while (running && !shuttingDown) {
+    try {
+      if (activeJobs.size < config.concurrency) {
+        const job = await claimNextJob();
+        if (job) {
+          executeJob(job);
+        }
+      }
+    } catch (error) {
+      console.error("Poll error:", error);
+    }
+
+    await sleep(config.pollInterval);
+  }
+}
+
 async function updateHeartbeat() {
   await supabase.from("workers").upsert({
     id: config.workerId,
@@ -853,7 +708,7 @@ async function updateHeartbeat() {
     active_jobs: activeJobs.size,
     status: shuttingDown ? "draining" : "active",
     hostname: hostname(),
-    version: "1.0.0",
+    version: "2.0.0",
   });
 }
 
@@ -862,9 +717,6 @@ function startHeartbeat() {
   setInterval(updateHeartbeat, config.heartbeatInterval);
 }
 
-/**
- * Stale job recovery
- */
 function startStaleJobRecovery() {
   setInterval(async () => {
     try {
@@ -879,12 +731,9 @@ function startStaleJobRecovery() {
     } catch (error) {
       console.error("Stale job recovery error:", error);
     }
-  }, 2 * 60 * 1000); // Every 2 minutes
+  }, 2 * 60 * 1000);
 }
 
-/**
- * Graceful shutdown
- */
 async function gracefulShutdown() {
   if (shuttingDown) return;
 
@@ -892,10 +741,8 @@ async function gracefulShutdown() {
   shuttingDown = true;
   running = false;
 
-  // Update status
   await updateHeartbeat();
 
-  // Wait for active jobs
   const deadline = Date.now() + config.shutdownTimeout;
 
   while (activeJobs.size > 0 && Date.now() < deadline) {
@@ -903,7 +750,6 @@ async function gracefulShutdown() {
     await sleep(1000);
   }
 
-  // Abort remaining jobs
   if (activeJobs.size > 0) {
     console.log(`Aborting ${activeJobs.size} remaining jobs...`);
     activeJobs.forEach((controller) => {
@@ -912,7 +758,6 @@ async function gracefulShutdown() {
     await sleep(1000);
   }
 
-  // Mark worker as dead
   await supabase
     .from("workers")
     .update({ status: "dead" })
@@ -922,9 +767,6 @@ async function gracefulShutdown() {
   process.exit(0);
 }
 
-/**
- * Utility
- */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

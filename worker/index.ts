@@ -350,6 +350,14 @@ Rules:
 }
 
 /**
+ * Message for conversation history in code generation
+ */
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+/**
  * Call OpenRouter API to generate code
  */
 async function callOpenRouter(
@@ -357,13 +365,24 @@ async function callOpenRouter(
   task: string,
   tools: Tool[],
   attachments: Attachment[] = [],
-  userAnswer?: string | null
-): Promise<string> {
+  userAnswer?: string | null,
+  conversationHistory?: ChatMessage[]
+): Promise<{ code: string; messages: ChatMessage[] }> {
   const systemPrompt = buildSystemPrompt(tools, attachments);
 
-  const userPrompt = userAnswer
-    ? `Previous question was answered: "${userAnswer}"\n\nOriginal task: ${task}\n\nContinue the task with this answer.`
-    : `Task: ${task}\n\nGenerate Python code to accomplish this task.`;
+  // Build messages array
+  let messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
+
+  if (conversationHistory && conversationHistory.length > 0) {
+    // Continue from existing conversation (for retries)
+    messages = [...messages, ...conversationHistory];
+  } else {
+    // Initial code generation
+    const userPrompt = userAnswer
+      ? `Previous question was answered: "${userAnswer}"\n\nOriginal task: ${task}\n\nContinue the task with this answer.`
+      : `Task: ${task}\n\nGenerate Python code to accomplish this task.`;
+    messages.push({ role: "user", content: userPrompt });
+  }
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -375,10 +394,7 @@ async function callOpenRouter(
     },
     body: JSON.stringify({
       model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
+      messages,
       temperature: 0.7,
       max_tokens: 2000,
     }),
@@ -395,11 +411,19 @@ async function callOpenRouter(
   // Clean up code - remove markdown code blocks if present
   code = code.replace(/^```python\n?/gm, "").replace(/^```\n?/gm, "").trim();
 
-  return code;
+  // Return updated conversation history (excluding system prompt for storage)
+  const updatedHistory: ChatMessage[] = conversationHistory
+    ? [...conversationHistory, { role: "assistant", content: code }]
+    : [
+        { role: "user", content: messages[1].content },
+        { role: "assistant", content: code },
+      ];
+
+  return { code, messages: updatedHistory };
 }
 
 /**
- * Run job in E2B sandbox
+ * Run job in E2B sandbox with automatic retry on code errors
  */
 async function runInSandbox(
   job: Job,
@@ -416,6 +440,7 @@ async function runInSandbox(
 
   let sandbox: InstanceType<typeof Sandbox> | null = null;
   const HITL_EXIT_CODE = 100;
+  const MAX_RETRIES = 5; // Max attempts to fix code errors
   const model = (job as any).model || "anthropic/claude-sonnet-4";
 
   try {
@@ -428,13 +453,7 @@ async function runInSandbox(
       await addLog(job.id, `Found ${attachments.length} attachment(s): ${attachments.map(a => a.filename).join(", ")}`, "info");
     }
 
-    // Step 3: Generate code using LLM with tool + attachment context
-    await addLog(job.id, `Generating code with ${model}...`, "info");
-
-    const code = await callOpenRouter(model, job.task, tools, attachments, job.user_answer);
-    await addLog(job.id, `Generated ${code.length} chars of code`, "debug");
-
-    // Step 4: Create sandbox
+    // Step 3: Create sandbox (reuse for all retries)
     sandbox = await Sandbox.create({
       timeoutMs: job.timeout_seconds * 1000,
     });
@@ -445,17 +464,16 @@ async function runInSandbox(
       throw new Error("Job was cancelled");
     }
 
-    // Step 5: Download attachments into sandbox
+    // Step 4: Download attachments into sandbox
     if (attachments.length > 0) {
       await addLog(job.id, "Downloading attachments to sandbox...", "info");
       const downloadedPaths = await downloadAttachmentsToSandbox(sandbox, attachments, job.id);
       await addLog(job.id, `Downloaded ${downloadedPaths.length} file(s) to sandbox`, "info");
     }
 
-    // Step 6: Install packages from discovered tools + common packages
+    // Step 5: Install packages from discovered tools + common packages
     await addLog(job.id, "Installing dependencies...", "info");
 
-    // Collect all packages to install
     const packagesToInstall = new Set<string>();
     packagesToInstall.add("requests");
     packagesToInstall.add("pandas");
@@ -466,7 +484,6 @@ async function runInSandbox(
     packagesToInstall.add("seaborn");
     packagesToInstall.add("scipy");
 
-    // Add packages from discovered tools
     for (const tool of tools) {
       const pkgs = tool.package_name.split(",").map(p => p.trim());
       for (const pkg of pkgs) {
@@ -476,7 +493,6 @@ async function runInSandbox(
       }
     }
 
-    // Add any previously discovered packages from job
     const jobPackages = job.tools_discovered || [];
     for (const pkg of jobPackages) {
       packagesToInstall.add(pkg);
@@ -491,60 +507,129 @@ async function runInSandbox(
       throw new Error("Job was cancelled");
     }
 
-    // Write and run the generated code
-    await sandbox.files.write("/home/user/task.py", code);
-    await addLog(job.id, "Executing code...", "info");
+    // Step 6: Code generation and execution loop with retries
+    let conversationHistory: ChatMessage[] | undefined;
+    let currentCode = "";
+    let attempt = 0;
+    let lastError = "";
 
-    const execution = await sandbox.commands.run(
-      "cd /home/user && python task.py",
-      {
-        timeoutMs: job.timeout_seconds * 1000,
-        onStdout: (data) => addLog(job.id, data.trim(), "info").catch(() => {}),
-        onStderr: (data) => addLog(job.id, data.trim(), "warn").catch(() => {}),
+    while (attempt < MAX_RETRIES) {
+      attempt++;
+
+      if (signal.aborted) {
+        throw new Error("Job was cancelled");
       }
-    );
 
-    // Check for HITL pause
-    if (execution.exitCode === HITL_EXIT_CODE || execution.stdout.includes("__NEED_INPUT__:")) {
-      const match = execution.stdout.match(/__NEED_INPUT__:\s*(.+)/);
-      const question = match ? match[1].trim() : "The agent needs more information";
+      // Generate or fix code
+      if (attempt === 1) {
+        await addLog(job.id, `Generating code with ${model}...`, "info");
+        const result = await callOpenRouter(model, job.task, tools, attachments, job.user_answer);
+        currentCode = result.code;
+        conversationHistory = result.messages;
+      } else {
+        await addLog(job.id, `Attempt ${attempt}/${MAX_RETRIES}: Asking ${model} to fix the error...`, "info");
 
-      await collectArtifacts(sandbox, job.id);
+        // Add error feedback to conversation
+        const errorFeedback: ChatMessage = {
+          role: "user",
+          content: `The code failed with the following error:\n\n\`\`\`\n${lastError}\n\`\`\`\n\nPlease fix the code to handle this error. Output ONLY the corrected Python code, no explanations.`,
+        };
+        conversationHistory = [...(conversationHistory || []), errorFeedback];
 
-      return {
-        success: true,
-        hitlPaused: true,
-        question,
-        executionState: {
-          checkpoint: "waiting_for_input",
-          context: {
-            variables: { generated_code: code },
-            files_created: [],
-            conversation_history: [],
-            packages_installed: Array.from(packagesToInstall),
+        const result = await callOpenRouter(model, job.task, tools, attachments, job.user_answer, conversationHistory);
+        currentCode = result.code;
+        conversationHistory = result.messages;
+      }
+
+      await addLog(job.id, `Generated ${currentCode.length} chars of code (attempt ${attempt})`, "debug");
+
+      // Write and execute the code
+      await sandbox.files.write("/home/user/task.py", currentCode);
+      await addLog(job.id, `Executing code (attempt ${attempt})...`, "info");
+
+      let stdout = "";
+      let stderr = "";
+
+      const execution = await sandbox.commands.run(
+        "cd /home/user && python task.py",
+        {
+          timeoutMs: job.timeout_seconds * 1000,
+          onStdout: (data) => {
+            stdout += data;
+            addLog(job.id, data.trim(), "info").catch(() => {});
           },
-          sandbox_id: null,
-          resumed_count: 0,
-          last_checkpoint_at: new Date().toISOString(),
-        },
-      };
+          onStderr: (data) => {
+            stderr += data;
+            addLog(job.id, data.trim(), "warn").catch(() => {});
+          },
+        }
+      );
+
+      // Check for HITL pause
+      if (execution.exitCode === HITL_EXIT_CODE || execution.stdout.includes("__NEED_INPUT__:")) {
+        const match = execution.stdout.match(/__NEED_INPUT__:\s*(.+)/);
+        const question = match ? match[1].trim() : "The agent needs more information";
+
+        await collectArtifacts(sandbox, job.id);
+
+        return {
+          success: true,
+          hitlPaused: true,
+          question,
+          executionState: {
+            checkpoint: "waiting_for_input",
+            context: {
+              variables: { generated_code: currentCode },
+              files_created: [],
+              conversation_history: conversationHistory || [],
+              packages_installed: Array.from(packagesToInstall),
+            },
+            sandbox_id: null,
+            resumed_count: 0,
+            last_checkpoint_at: new Date().toISOString(),
+          },
+        };
+      }
+
+      // Check for success
+      if (execution.exitCode === 0) {
+        await collectArtifacts(sandbox, job.id);
+        const result = stdout.trim() || "Task completed successfully (no output)";
+
+        if (attempt > 1) {
+          await addLog(job.id, `Code succeeded after ${attempt} attempts`, "info");
+        }
+
+        return { success: true, result };
+      }
+
+      // Execution failed - prepare for retry
+      lastError = stderr || `Process exited with code ${execution.exitCode}`;
+
+      // Include partial stdout in error context if helpful
+      if (stdout.trim()) {
+        lastError = `stdout (partial output before error):\n${stdout.trim()}\n\nstderr:\n${lastError}`;
+      }
+
+      await addLog(job.id, `Code execution failed (attempt ${attempt}/${MAX_RETRIES}): ${stderr.substring(0, 200)}...`, "warn");
+
+      // If this was the last attempt, return failure
+      if (attempt >= MAX_RETRIES) {
+        await addLog(job.id, `Max retries (${MAX_RETRIES}) reached, job failed`, "error");
+        return {
+          success: false,
+          error: `Code failed after ${MAX_RETRIES} attempts. Last error:\n${lastError}`,
+        };
+      }
+
+      // Continue to next retry attempt
     }
 
-    // Check for error
-    if (execution.exitCode !== 0) {
-      return {
-        success: false,
-        error: execution.stderr || `Process exited with code ${execution.exitCode}`,
-      };
-    }
-
-    // Collect artifacts
-    await collectArtifacts(sandbox, job.id);
-
-    // Return stdout as result
-    const result = execution.stdout.trim() || "Task completed successfully (no output)";
-
-    return { success: true, result };
+    // Should not reach here, but just in case
+    return {
+      success: false,
+      error: "Unexpected end of retry loop",
+    };
   } finally {
     if (sandbox) {
       try {

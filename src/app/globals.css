@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+/* Status badges */
+.status-queued {
+  @apply bg-yellow-500/10 text-yellow-500 border-yellow-500/20;
+}
+
+.status-running {
+  @apply bg-blue-500/10 text-blue-500 border-blue-500/20;
+}
+
+.status-completed {
+  @apply bg-green-500/10 text-green-500 border-green-500/20;
+}
+
+.status-failed {
+  @apply bg-red-500/10 text-red-500 border-red-500/20;
+}
+
+.status-waiting_for_user {
+  @apply bg-purple-500/10 text-purple-500 border-purple-500/20;
+}
+
+.status-cancelled {
+  @apply bg-gray-500/10 text-gray-500 border-gray-500/20;
+}

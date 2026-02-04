@@ -1,0 +1,40 @@
+{
+  "name": "engine",
+  "version": "1.0.0",
+  "description": "Agent Operations Platform with task discovery, job queue, and E2B sandbox execution",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "worker": "tsx worker/index.ts",
+    "worker:dev": "tsx watch worker/index.ts",
+    "db:migrate": "supabase db push",
+    "db:reset": "supabase db reset"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.94.0",
+    "@upstash/redis": "^1.36.2",
+    "e2b": "^2.12.0",
+    "next": "^14.2.35",
+    "openai": "^6.17.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@types/uuid": "^10.0.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.19.0",
+    "eslint-config-next": "^15.1.6",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.3"
+  }
+}

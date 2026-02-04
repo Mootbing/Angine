@@ -3,10 +3,9 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Briefcase,
@@ -31,7 +29,6 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
-  ArrowRight,
   Sparkles,
 } from "lucide-react";
 
@@ -67,9 +64,10 @@ const availableModels = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [apiKey, setApiKey] = useState<string | null>(null);
 
   const [taskInput, setTaskInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("anthropic/claude-sonnet-4");
@@ -80,17 +78,83 @@ export default function DashboardPage() {
     filename: string;
     storage_path: string;
     public_url: string;
-    mime_type?: string;
-    size_bytes?: number;
   }>>([]);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Get or create API key for the current user
+  useEffect(() => {
+    const initApiKey = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check localStorage first
+      const savedKey = localStorage.getItem("engine_api_key");
+      if (savedKey) {
+        setApiKey(savedKey);
+        return;
+      }
+
+      // Create a new API key for this user
+      const keyValue = `engine_user_${user.id.slice(0, 8)}_${crypto.randomUUID().slice(0, 16)}`;
+
+      const { error } = await supabase.from("api_keys").insert({
+        key_prefix: keyValue.slice(0, 20),
+        key_hash: await hashKey(keyValue),
+        name: `Auto-generated for ${user.email}`,
+        owner_email: user.email,
+        scopes: ["jobs:read", "jobs:write", "agents:read", "admin"],
+      });
+
+      if (!error) {
+        localStorage.setItem("engine_api_key", keyValue);
+        setApiKey(keyValue);
+      }
+    };
+
+    initApiKey();
+  }, [supabase]);
+
+  // Hash API key (simple SHA-256)
+  async function hashKey(key: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(key);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  const fetchMetrics = async () => {
+    if (!apiKey) return;
+
+    try {
+      const res = await fetch("/api/v1/admin/metrics", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMetrics(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch metrics:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (apiKey) {
+      fetchMetrics();
+      const interval = setInterval(fetchMetrics, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [apiKey]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !apiKey) return;
 
     setIsUploading(true);
-
     try {
       for (const file of Array.from(files)) {
         const formData = new FormData();
@@ -102,24 +166,15 @@ export default function DashboardPage() {
           body: formData,
         });
 
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || "Upload failed");
+        if (res.ok) {
+          const uploaded = await res.json();
+          setUploadedFiles((prev) => [...prev, uploaded]);
         }
-
-        const uploaded = await res.json();
-        setUploadedFiles((prev) => [...prev, uploaded]);
       }
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setIsUploading(false);
       e.target.value = "";
     }
-  };
-
-  const removeFile = (index: number) => {
-    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const submitJob = async (e: FormEvent) => {
@@ -157,81 +212,10 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchMetrics = async () => {
-    if (!apiKey) return;
-
-    try {
-      const res = await fetch("/api/v1/admin/metrics", {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to fetch metrics");
-      }
-
-      const data = await res.json();
-      setMetrics(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    }
-  };
-
-  useEffect(() => {
-    const savedKey = localStorage.getItem("engine_api_key");
-    if (savedKey) {
-      setApiKey(savedKey);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (apiKey) {
-      localStorage.setItem("engine_api_key", apiKey);
-      fetchMetrics();
-      const interval = setInterval(fetchMetrics, 10000);
-      return () => clearInterval(interval);
-    }
-  }, [apiKey]);
-
-  // API Key Input View
-  if (!metrics) {
+  if (loading) {
     return (
-      <div className="max-w-lg mx-auto mt-20">
-        <Card className="bg-card/50 backdrop-blur border-border/50">
-          <CardHeader className="text-center pb-2">
-            <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center">
-              <KeyRound className="w-7 h-7 text-black" />
-            </div>
-            <CardTitle className="text-2xl">Welcome to Engine</CardTitle>
-            <CardDescription>
-              Enter your admin API key to access the dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="engine_live_..."
-                className="bg-background"
-              />
-            </div>
-            <Button onClick={fetchMetrics} className="w-full" size="lg">
-              Connect
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -247,66 +231,64 @@ export default function DashboardPage() {
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Total Jobs"
-          value={metrics.jobs.total}
-          icon={<Briefcase className="w-5 h-5" />}
-          gradient="from-blue-500 to-cyan-500"
-        >
-          <div className="mt-4 space-y-2">
-            <StatusRow label="Queued" value={metrics.jobs.by_status.queued || 0} color="amber" />
-            <StatusRow label="Running" value={metrics.jobs.by_status.running || 0} color="blue" />
-            <StatusRow label="Completed" value={metrics.jobs.by_status.completed || 0} color="violet" />
-            <StatusRow label="Failed" value={metrics.jobs.by_status.failed || 0} color="red" />
-            <StatusRow label="Waiting" value={metrics.jobs.by_status.waiting_for_user || 0} color="purple" />
-          </div>
-        </MetricCard>
+      {metrics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard
+            title="Total Jobs"
+            value={metrics.jobs.total}
+            icon={<Briefcase className="w-5 h-5" />}
+          >
+            <div className="mt-4 space-y-2">
+              <StatusRow label="Queued" value={metrics.jobs.by_status.queued || 0} color="yellow" />
+              <StatusRow label="Running" value={metrics.jobs.by_status.running || 0} color="blue" />
+              <StatusRow label="Completed" value={metrics.jobs.by_status.completed || 0} color="green" />
+              <StatusRow label="Failed" value={metrics.jobs.by_status.failed || 0} color="red" />
+              <StatusRow label="Waiting" value={metrics.jobs.by_status.waiting_for_user || 0} color="yellow" />
+            </div>
+          </MetricCard>
 
-        <MetricCard
-          title="Workers"
-          value={metrics.workers.total}
-          icon={<Server className="w-5 h-5" />}
-          gradient="from-purple-500 to-pink-500"
-        >
-          <div className="mt-4 space-y-2">
-            <StatusRow label="Active" value={metrics.workers.by_status.active || 0} color="violet" />
-            <StatusRow label="Draining" value={metrics.workers.by_status.draining || 0} color="amber" />
-            <StatusRow label="Dead" value={metrics.workers.by_status.dead || 0} color="red" />
-          </div>
-        </MetricCard>
+          <MetricCard
+            title="Workers"
+            value={metrics.workers.total}
+            icon={<Server className="w-5 h-5" />}
+          >
+            <div className="mt-4 space-y-2">
+              <StatusRow label="Active" value={metrics.workers.by_status.active || 0} color="green" />
+              <StatusRow label="Draining" value={metrics.workers.by_status.draining || 0} color="yellow" />
+              <StatusRow label="Dead" value={metrics.workers.by_status.dead || 0} color="red" />
+            </div>
+          </MetricCard>
 
-        <MetricCard
-          title="Agents"
-          value={metrics.agents.total}
-          icon={<Bot className="w-5 h-5" />}
-          gradient="from-violet-500 to-purple-500"
-        >
-          <div className="mt-4 space-y-2">
-            <StatusRow label="Verified" value={metrics.agents.verified} color="violet" />
-            <StatusRow label="Pending" value={metrics.agents.total - metrics.agents.verified} color="amber" />
-          </div>
-        </MetricCard>
+          <MetricCard
+            title="Agents"
+            value={metrics.agents.total}
+            icon={<Bot className="w-5 h-5" />}
+          >
+            <div className="mt-4 space-y-2">
+              <StatusRow label="Verified" value={metrics.agents.verified} color="green" />
+              <StatusRow label="Pending" value={metrics.agents.total - metrics.agents.verified} color="yellow" />
+            </div>
+          </MetricCard>
 
-        <MetricCard
-          title="API Keys"
-          value={metrics.api_keys.total}
-          icon={<KeyRound className="w-5 h-5" />}
-          gradient="from-orange-500 to-amber-500"
-        >
-          <div className="mt-4 space-y-2">
-            <StatusRow label="Active" value={metrics.api_keys.active} color="violet" />
-            <StatusRow label="Revoked" value={metrics.api_keys.total - metrics.api_keys.active} color="red" />
-          </div>
-        </MetricCard>
-      </div>
+          <MetricCard
+            title="API Keys"
+            value={metrics.api_keys.total}
+            icon={<KeyRound className="w-5 h-5" />}
+          >
+            <div className="mt-4 space-y-2">
+              <StatusRow label="Active" value={metrics.api_keys.active} color="green" />
+              <StatusRow label="Revoked" value={metrics.api_keys.total - metrics.api_keys.active} color="red" />
+            </div>
+          </MetricCard>
+        </div>
+      )}
 
       {/* Job Submission */}
-      <Card className="bg-card/50 backdrop-blur border-border/50">
+      <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-black" />
+            <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-background" />
             </div>
             <div>
               <CardTitle>Submit a Job</CardTitle>
@@ -322,27 +304,22 @@ export default function DashboardPage() {
               placeholder="Describe what you want to do...
 
 Examples:
-• Calculate the first 20 prime numbers
+• Scrape the top posts from Hacker News
 • Generate a CSV file with random user data
 • Analyze the sentiment of this text: 'I love this product!'"
               rows={5}
               className="bg-background resize-none"
             />
 
-            {/* Uploaded files */}
             {uploadedFiles.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {uploadedFiles.map((file, index) => (
-                  <Badge
-                    key={index}
-                    variant="secondary"
-                    className="pl-2 pr-1 py-1.5 gap-2"
-                  >
+                  <Badge key={index} variant="secondary" className="pl-2 pr-1 py-1.5 gap-2">
                     <Paperclip className="w-3 h-3" />
                     <span className="max-w-[150px] truncate">{file.filename}</span>
                     <button
                       type="button"
-                      onClick={() => removeFile(index)}
+                      onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
                       className="ml-1 hover:bg-muted rounded p-0.5"
                     >
                       <X className="w-3 h-3" />
@@ -354,8 +331,7 @@ Examples:
 
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                {/* File upload */}
-                <Label
+                <label
                   htmlFor="file-upload"
                   className={cn(
                     "cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
@@ -363,11 +339,7 @@ Examples:
                     isUploading && "opacity-50 cursor-not-allowed"
                   )}
                 >
-                  {isUploading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Paperclip className="w-4 h-4" />
-                  )}
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
                   {isUploading ? "Uploading..." : "Attach"}
                   <input
                     id="file-upload"
@@ -377,9 +349,8 @@ Examples:
                     disabled={isUploading}
                     className="hidden"
                   />
-                </Label>
+                </label>
 
-                {/* Model selector */}
                 <Select value={selectedModel} onValueChange={setSelectedModel}>
                   <SelectTrigger className="w-[200px] bg-background">
                     <SelectValue />
@@ -388,20 +359,14 @@ Examples:
                     {availableModels.map((model) => (
                       <SelectItem key={model.id} value={model.id}>
                         <span className="font-medium">{model.name}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">
-                          {model.provider}
-                        </span>
+                        <span className="text-muted-foreground ml-2 text-xs">{model.provider}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <Button
-                type="submit"
-                disabled={!taskInput.trim() || isSubmitting}
-                className="min-w-[120px]"
-              >
+              <Button type="submit" disabled={!taskInput.trim() || isSubmitting} className="min-w-[120px]">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -427,37 +392,39 @@ Examples:
       </Card>
 
       {/* Throughput */}
-      <Card className="bg-card/50 backdrop-blur border-border/50">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <CardTitle>Last Hour</CardTitle>
-              <CardDescription>Job throughput metrics</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-8">
-            <div>
-              <div className="text-4xl font-bold">{metrics.jobs.last_hour.created}</div>
-              <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                <Clock className="w-4 h-4" />
-                Jobs Created
+      {metrics && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-background" />
+              </div>
+              <div>
+                <CardTitle>Last Hour</CardTitle>
+                <CardDescription>Job throughput metrics</CardDescription>
               </div>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-violet-400">{metrics.jobs.last_hour.completed}</div>
-              <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                <CheckCircle2 className="w-4 h-4" />
-                Jobs Completed
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-8">
+              <div>
+                <div className="text-4xl font-bold">{metrics.jobs.last_hour.created}</div>
+                <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                  <Clock className="w-4 h-4" />
+                  Jobs Created
+                </div>
+              </div>
+              <div>
+                <div className="text-4xl font-bold text-green-500">{metrics.jobs.last_hour.completed}</div>
+                <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Jobs Completed
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -466,24 +433,22 @@ function MetricCard({
   title,
   value,
   icon,
-  gradient,
   children,
 }: {
   title: string;
   value: number;
   icon: React.ReactNode;
-  gradient: string;
   children?: React.ReactNode;
 }) {
   return (
-    <Card className="bg-card/50 backdrop-blur border-border/50">
+    <Card>
       <CardContent className="pt-6">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
             <p className="text-3xl font-bold mt-1">{value}</p>
           </div>
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white`}>
+          <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
             {icon}
           </div>
         </div>
@@ -495,11 +460,10 @@ function MetricCard({
 
 function StatusRow({ label, value, color }: { label: string; value: number; color: string }) {
   const colorClasses: Record<string, string> = {
-    violet: "bg-violet-500",
-    amber: "bg-amber-500",
+    green: "bg-green-500",
+    yellow: "bg-yellow-500",
     red: "bg-red-500",
     blue: "bg-blue-500",
-    purple: "bg-purple-500",
   };
 
   return (

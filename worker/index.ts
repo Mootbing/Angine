@@ -393,9 +393,15 @@ interface AgentResult {
   executionState?: ExecutionState;
 }
 
+// HITL mode type
+type HitlMode = "plan_approval" | "auto_execute" | "always_ask";
+
 async function runAgentLoop(job: Job, signal: AbortSignal): Promise<AgentResult> {
   const model = (job as any).model || "anthropic/claude-sonnet-4";
   const MAX_ITERATIONS = 20;
+
+  // Get HITL mode from execution state (default to plan_approval)
+  const hitlMode: HitlMode = (job.execution_state as any)?.context?.hitl_mode || "plan_approval";
 
   // Load attachments
   const attachments = new Map<string, { content: string; url: string }>();
@@ -438,8 +444,76 @@ async function runAgentLoop(job: Job, signal: AbortSignal): Promise<AgentResult>
   // Build initial messages
   const messages: Array<{ role: string; content?: string; tool_calls?: ToolCall[]; tool_call_id?: string; name?: string }> = [];
 
-  // System message
-  let systemContent = `You are an intelligent agent that completes tasks using available tools. You have access to a tool marketplace with many specialized capabilities.
+  // System message - varies based on HITL mode
+  let systemContent: string;
+
+  if (hitlMode === "auto_execute") {
+    // Auto-execute mode: skip plan approval, just do the task
+    systemContent = `You are an intelligent agent that completes tasks using available tools. You have access to a tool marketplace with many specialized capabilities.
+
+## Workflow
+
+1. **ANALYZE** - Understand what the task requires
+2. **DISCOVER** - Use discover_tools to find relevant specialized tools
+3. **EXECUTE** - Execute your plan step by step using available tools
+4. **COMPLETE** - Call final_answer with the result
+
+## Built-in Tools
+
+- **discover_tools**: Search for specialized MCP tools (browser automation, GitHub, etc.)
+- **fetch_url**: Fetch content from URLs (web pages, APIs)
+- **run_python**: Execute Python code for calculations, data processing
+- **read_file**: Read uploaded file attachments
+- **write_file**: Save files as job artifacts
+- **ask_user**: Pause and ask user a question (only if you NEED clarification)
+- **final_answer**: Return the final result (REQUIRED to complete)
+
+## Guidelines
+
+- Execute the task efficiently without asking for approval
+- Only use ask_user if you genuinely need clarification on ambiguous requirements
+- Call final_answer when done`;
+  } else if (hitlMode === "always_ask") {
+    // Always ask mode: ask before every significant action
+    systemContent = `You are an intelligent agent that completes tasks using available tools. You have access to a tool marketplace with many specialized capabilities.
+
+## IMPORTANT: Human-in-the-loop mode is ENABLED
+
+You MUST ask for user approval before EVERY significant action:
+- Before executing any code (run_python)
+- Before making any web requests (fetch_url)
+- Before writing any files (write_file)
+- Before taking any action that could have side effects
+
+## Workflow
+
+1. **ANALYZE** - Understand what the task requires
+2. **DISCOVER** - Use discover_tools to find relevant specialized tools
+3. **PLAN** - Create a plan for the NEXT step only
+4. **ASK** - Use ask_user to describe what you're about to do and ask for approval
+5. **EXECUTE** - After approval, execute ONLY that one step
+6. **REPEAT** - Go back to step 3 until task is complete
+7. **COMPLETE** - Call final_answer with the result
+
+## Built-in Tools
+
+- **discover_tools**: Search for specialized MCP tools (browser automation, GitHub, etc.)
+- **fetch_url**: Fetch content from URLs (web pages, APIs) - ASK FIRST
+- **run_python**: Execute Python code for calculations, data processing - ASK FIRST
+- **read_file**: Read uploaded file attachments
+- **write_file**: Save files as job artifacts - ASK FIRST
+- **ask_user**: Pause and ask user a question - USE BEFORE EVERY ACTION
+- **final_answer**: Return the final result (REQUIRED to complete)
+
+## Guidelines
+
+- ALWAYS ask before executing any action
+- Describe exactly what you're about to do
+- Wait for approval before proceeding
+- Call final_answer when done`;
+  } else {
+    // Default: plan_approval mode - ask once after planning
+    systemContent = `You are an intelligent agent that completes tasks using available tools. You have access to a tool marketplace with many specialized capabilities.
 
 ## IMPORTANT: You MUST follow this workflow
 
@@ -475,6 +549,7 @@ DO NOT execute any actions (fetch_url, run_python, write_file) until the user ap
 - Keep your plan summary concise (high-level steps only)
 - After approval, execute efficiently
 - Call final_answer when done`;
+  }
 
   if (attachments.size > 0) {
     systemContent += `\n\nUploaded files available:\n`;

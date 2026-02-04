@@ -1,6 +1,9 @@
 import { getSupabaseAdmin } from "@/lib/db";
 import type { Job, JobStatus, LogLevel, ExecutionState } from "@/types";
 
+// HITL mode type
+export type HitlMode = "plan_approval" | "auto_execute" | "always_ask";
+
 /**
  * Enqueue a new job
  */
@@ -10,8 +13,24 @@ export async function enqueueJob(params: {
   priority?: number;
   timeoutSeconds?: number;
   model?: string;
+  hitlMode?: HitlMode;
 }): Promise<Job> {
   const supabase = getSupabaseAdmin();
+
+  // Store hitl_mode in execution_state so worker can read it
+  const initialExecutionState = params.hitlMode ? {
+    checkpoint: "initial",
+    context: {
+      hitl_mode: params.hitlMode,
+      variables: {},
+      files_created: [],
+      conversation_history: [],
+      packages_installed: [],
+    },
+    sandbox_id: null,
+    resumed_count: 0,
+    last_checkpoint_at: new Date().toISOString(),
+  } : null;
 
   const { data, error } = await supabase
     .from("job_queue")
@@ -21,6 +40,7 @@ export async function enqueueJob(params: {
       priority: params.priority ?? 0,
       timeout_seconds: params.timeoutSeconds ?? 300,
       model: params.model ?? "anthropic/claude-sonnet-4",
+      execution_state: initialExecutionState,
     })
     .select()
     .single();

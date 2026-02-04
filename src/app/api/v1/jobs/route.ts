@@ -17,12 +17,16 @@ const AVAILABLE_MODELS = [
   "meta-llama/llama-3.3-70b-instruct",
 ];
 
+// HITL mode options
+export type HitlMode = "plan_approval" | "auto_execute" | "always_ask";
+
 // Request validation schema
 const createJobSchema = z.object({
   task: z.string().min(1).max(10000),
   priority: z.number().int().min(0).max(100).optional().default(0),
   timeout_seconds: z.number().int().min(30).max(3600).optional().default(300),
   model: z.string().optional().default("anthropic/claude-sonnet-4"),
+  hitl_mode: z.enum(["plan_approval", "auto_execute", "always_ask"]).optional().default("plan_approval"),
   attachments: z.array(z.object({
     filename: z.string(),
     storage_path: z.string(),
@@ -53,15 +57,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { task, priority, timeout_seconds, model, attachments } = parsed.data;
+    const { task, priority, timeout_seconds, model, hitl_mode, attachments } = parsed.data;
 
-    // Create the job
+    // Create the job with HITL config in execution state
     const job = await enqueueJob({
       task,
       apiKeyId: auth.context.keyId,
       priority,
       timeoutSeconds: timeout_seconds,
       model,
+      hitlMode: hitl_mode,
     });
 
     await addJobLog(job.id, `Job created: ${task.substring(0, 100)}...`, "info");

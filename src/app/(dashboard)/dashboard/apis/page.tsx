@@ -37,6 +37,8 @@ import {
   Bot,
   CheckCircle2,
   KeyRound,
+  Clock,
+  UserCheck,
 } from "lucide-react";
 
 const availableModels = [
@@ -47,6 +49,33 @@ const availableModels = [
   { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "Google" },
   { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
   { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", provider: "Meta" },
+];
+
+const timeoutOptions = [
+  { value: 60, label: "1 minute" },
+  { value: 300, label: "5 minutes" },
+  { value: 600, label: "10 minutes" },
+  { value: 900, label: "15 minutes" },
+  { value: 1800, label: "30 minutes" },
+  { value: 3600, label: "1 hour" },
+];
+
+const hitlModeOptions = [
+  {
+    value: "plan_approval",
+    label: "Ask after planning",
+    description: "Agent creates a plan and asks for approval before executing"
+  },
+  {
+    value: "auto_execute",
+    label: "Auto-execute",
+    description: "Agent executes immediately without asking for approval"
+  },
+  {
+    value: "always_ask",
+    label: "Ask before every action",
+    description: "Agent asks for approval before each significant action"
+  },
 ];
 
 interface ApiKey {
@@ -79,6 +108,8 @@ export default function ApisPage() {
   // Job submission state
   const [taskInput, setTaskInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("anthropic/claude-sonnet-4");
+  const [selectedTimeout, setSelectedTimeout] = useState(300);
+  const [selectedHitlMode, setSelectedHitlMode] = useState("plan_approval");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
@@ -177,6 +208,8 @@ export default function ApisPage() {
         body: JSON.stringify({
           task: taskInput.trim(),
           model: selectedModel,
+          timeout_seconds: selectedTimeout,
+          hitl_mode: selectedHitlMode,
           attachments: uploadedFiles.length > 0 ? uploadedFiles : undefined,
         }),
       });
@@ -404,6 +437,7 @@ Examples:
                 </div>
               )}
 
+              {/* Model & Attach */}
               <div className="flex items-center gap-3">
                 <label
                   htmlFor="file-upload"
@@ -439,6 +473,54 @@ Examples:
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Timeout & HITL Mode */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="w-3 h-3" />
+                    Timeout
+                  </Label>
+                  <Select value={String(selectedTimeout)} onValueChange={(v) => setSelectedTimeout(Number(v))}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeoutOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={String(opt.value)}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <UserCheck className="w-3 h-3" />
+                    Human Approval
+                  </Label>
+                  <Select value={selectedHitlMode} onValueChange={setSelectedHitlMode}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hitlModeOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{opt.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* HITL Mode Description */}
+              <p className="text-xs text-muted-foreground">
+                {hitlModeOptions.find(o => o.value === selectedHitlMode)?.description}
+              </p>
 
               <Button type="submit" disabled={!taskInput.trim() || isSubmitting} className="w-full">
                 {isSubmitting ? (

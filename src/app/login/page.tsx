@@ -162,7 +162,7 @@ export default function LoginPage() {
           <p className="text-center text-sm text-muted-foreground">
             {mode === "login" ? (
               <>
-                Don't have an account?{" "}
+                Don&apos;t have an account?{" "}
                 <button
                   type="button"
                   className="underline hover:text-foreground"

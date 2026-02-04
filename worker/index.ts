@@ -7,6 +7,7 @@ const requiredEnvVars = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "OPENROUTER_API_KEY",
+  "E2B_API_KEY",
 ];
 
 for (const envVar of requiredEnvVars) {
@@ -183,11 +184,15 @@ async function executeTool(
         const { url, method = "GET", headers = {}, body } = args;
         await addLog(ctx.jobId, `Fetching ${method} ${url}`, "info");
 
+        const fetchController = new AbortController();
+        const timeout = setTimeout(() => fetchController.abort(), 30000); // 30s timeout
+
         const response = await fetch(url, {
           method,
           headers: headers as Record<string, string>,
           body: body ? body : undefined,
-        });
+          signal: fetchController.signal,
+        }).finally(() => clearTimeout(timeout));
 
         const contentType = response.headers.get("content-type") || "";
         let text: string;
@@ -224,12 +229,17 @@ async function executeTool(
           );
         }
 
-        // Install additional packages if requested
+        // Install additional packages if requested (sanitize names to prevent injection)
         if (packages.length > 0) {
-          await ctx.sandbox.commands.run(
-            `pip install ${packages.join(" ")} -q`,
-            { timeoutMs: 60000 }
-          );
+          const safePackages = packages
+            .filter((p: string) => /^[a-zA-Z0-9_\-\[\]<>=.,]+$/.test(p))
+            .slice(0, 10); // Limit to 10 packages
+          if (safePackages.length > 0) {
+            await ctx.sandbox.commands.run(
+              `pip install ${safePackages.join(" ")} -q`,
+              { timeoutMs: 60000 }
+            );
+          }
         }
 
         // Write and execute code
@@ -311,10 +321,25 @@ async function runAgentLoop(job: Job, signal: AbortSignal): Promise<AgentResult>
   const attachments = new Map<string, { content: string; url: string }>();
   const jobAttachments = await fetchJobAttachments(job.id);
 
+  const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB limit
+
   for (const att of jobAttachments) {
     try {
+      // Skip files that are too large
+      if (att.size_bytes && att.size_bytes > MAX_ATTACHMENT_SIZE) {
+        await addLog(job.id, `Skipping large attachment: ${att.filename} (${Math.round(att.size_bytes / 1024 / 1024)}MB)`, "warn");
+        continue;
+      }
+
       const response = await fetch(att.public_url);
       const content = await response.text();
+
+      // Double-check size after download
+      if (content.length > MAX_ATTACHMENT_SIZE) {
+        await addLog(job.id, `Attachment too large after download: ${att.filename}`, "warn");
+        continue;
+      }
+
       attachments.set(att.filename, { content, url: att.public_url });
       await addLog(job.id, `Loaded attachment: ${att.filename}`, "debug");
     } catch (err) {
@@ -357,14 +382,28 @@ Guidelines:
     }
   }
 
-  messages.push({ role: "system", content: systemContent });
+  // Check if we're resuming from a previous state
+  const executionState = job.execution_state as ExecutionState | null;
+  if (executionState?.context?.conversation_history && job.user_answer) {
+    // Restore conversation history from previous execution
+    const history = executionState.context.conversation_history as Array<any>;
+    messages.push(...history);
 
-  // User task
-  let userMessage = `Task: ${job.task}`;
-  if (job.user_answer) {
-    userMessage += `\n\nUser's answer to your previous question: ${job.user_answer}`;
+    // Add user's answer as a new message
+    messages.push({
+      role: "user",
+      content: `User's answer: ${job.user_answer}`,
+    });
+
+    await addLog(job.id, `Resuming job with ${history.length} previous messages`, "info");
+  } else {
+    // Fresh start
+    messages.push({ role: "system", content: systemContent });
+
+    // User task
+    const userMessage = `Task: ${job.task}`;
+    messages.push({ role: "user", content: userMessage });
   }
-  messages.push({ role: "user", content: userMessage });
 
   await addLog(job.id, `Starting agent loop with ${model}`, "info");
 
@@ -425,16 +464,23 @@ Guidelines:
     for (const toolCall of toolCalls) {
       const toolName = toolCall.function.name;
       let toolArgs: Record<string, any>;
+      let parseError = false;
 
       try {
         toolArgs = JSON.parse(toolCall.function.arguments);
       } catch {
         toolArgs = {};
+        parseError = true;
       }
 
       await addLog(job.id, `Tool call: ${toolName}(${JSON.stringify(toolArgs).substring(0, 100)}...)`, "info");
 
-      const toolResult = await executeTool(toolName, toolArgs, ctx);
+      let toolResult;
+      if (parseError) {
+        toolResult = { error: `Failed to parse tool arguments: ${toolCall.function.arguments.substring(0, 200)}` };
+      } else {
+        toolResult = await executeTool(toolName, toolArgs, ctx);
+      }
 
       // Handle special results
       if (toolResult.finalAnswer !== undefined) {
@@ -450,7 +496,10 @@ Guidelines:
       }
 
       if (toolResult.askUser !== undefined) {
-        // Save state and pause for user input
+        // Save artifacts before pausing
+        await saveArtifacts(ctx);
+
+        // Clean up sandbox
         if (ctx.sandbox) {
           try { await ctx.sandbox.kill(); } catch {}
         }

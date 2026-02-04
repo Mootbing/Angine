@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 interface Metrics {
   jobs: {
@@ -23,9 +24,49 @@ interface Metrics {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
+
+  // Job submission state
+  const [taskInput, setTaskInput] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [lastJobId, setLastJobId] = useState<string | null>(null);
+
+  const submitJob = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!taskInput.trim() || !apiKey) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch("/api/v1/jobs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ task: taskInput.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create job");
+      }
+
+      const job = await res.json();
+      setLastJobId(job.id);
+      setTaskInput("");
+      fetchMetrics(); // Refresh metrics
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const fetchMetrics = async () => {
     if (!apiKey) return;
@@ -136,6 +177,71 @@ export default function DashboardPage() {
               <StatusRow label="Revoked" value={metrics.api_keys.total - metrics.api_keys.active} color="red" />
             </div>
           </MetricCard>
+        </div>
+      )}
+
+      {/* Job Submission */}
+      {metrics && (
+        <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <h2 className="text-lg font-semibold mb-4">Submit a Job</h2>
+          <form onSubmit={submitJob} className="space-y-4">
+            <div>
+              <textarea
+                value={taskInput}
+                onChange={(e) => setTaskInput(e.target.value)}
+                placeholder="Describe what you want to do in natural language...
+
+Examples:
+• Calculate the first 20 prime numbers
+• Generate a CSV file with random user data
+• Analyze the sentiment of this text: 'I love this product!'"
+                rows={4}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 resize-none"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-zinc-500">
+                {taskInput.length > 0 && `${taskInput.length} characters`}
+              </div>
+              <button
+                type="submit"
+                disabled={!taskInput.trim() || isSubmitting}
+                className="px-6 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Job"
+                )}
+              </button>
+            </div>
+            {submitError && (
+              <p className="text-red-500 text-sm">{submitError}</p>
+            )}
+            {lastJobId && (
+              <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-green-400 text-sm">
+                  Job created!{" "}
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/dashboard/jobs/${lastJobId}`)}
+                    className="underline hover:text-green-300"
+                  >
+                    View job →
+                  </button>
+                </span>
+              </div>
+            )}
+          </form>
         </div>
       )}
 

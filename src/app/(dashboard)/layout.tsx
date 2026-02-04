@@ -24,7 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   LayoutDashboard,
   ListTodo,
-  Bot,
+  Blocks,
   Server,
   KeyRound,
   Zap,
@@ -32,15 +32,17 @@ import {
   ChevronRight,
   LogOut,
   User,
+  FlaskConical,
 } from "lucide-react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Jobs", href: "/dashboard/jobs", icon: ListTodo },
-  { name: "Agents", href: "/dashboard/agents", icon: Bot },
+  { name: "Tools & MCPs", href: "/dashboard/tools", icon: Blocks },
   { name: "Workers", href: "/dashboard/workers", icon: Server },
   { name: "API Keys", href: "/dashboard/keys", icon: KeyRound },
+  { name: "API Playground", href: "/dashboard/apis", icon: FlaskConical },
 ];
 
 export default function DashboardLayout({

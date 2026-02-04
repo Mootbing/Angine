@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -241,7 +241,7 @@ export default function JobDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <InfoRow icon={<Timer className="w-4 h-4" />} label="Priority" value={String(job.priority)} />
-            <InfoRow icon={<Clock className="w-4 h-4" />} label="Timeout" value={`${job.timeout_seconds}s`} />
+            <InfoRow icon={<Clock className="w-4 h-4" />} label="Timeout" value={formatDuration(job.timeout_seconds)} />
             <InfoRow icon={<RotateCcw className="w-4 h-4" />} label="Retries" value={String(job.retry_count)} />
             <Separator className="bg-border/50" />
             <InfoRow label="Created" value={new Date(job.created_at).toLocaleString()} />

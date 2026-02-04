@@ -30,12 +30,13 @@ export async function GET(request: NextRequest) {
     });
 
     return successResponse({
-      agents: agents.map((a) => ({
+      agents: agents.map((a: any) => ({
         id: a.id,
         name: a.name,
         description: a.description,
-        package_name: a.package_name,
+        package_name: a.mcp_package,
         version: a.version,
+        category: a.category,
         verified: a.verified,
         created_at: a.created_at,
       })),
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
         id: agent.id,
         name: agent.name,
         description: agent.description,
-        package_name: agent.package_name,
+        package_name: (agent as any).mcp_package,
         version: agent.version,
         verified: agent.verified,
         created_at: agent.created_at,

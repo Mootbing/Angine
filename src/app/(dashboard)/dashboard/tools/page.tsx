@@ -39,7 +39,7 @@ const categoryColors: Record<string, string> = {
   general: "from-zinc-500 to-zinc-600",
 };
 
-export default function AgentsPage() {
+export default function ToolsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,8 +85,8 @@ export default function AgentsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
-          <p className="text-muted-foreground">Browse available tools and capabilities</p>
+          <h1 className="text-3xl font-bold tracking-tight">Tools & MCPs</h1>
+          <p className="text-muted-foreground">Browse available MCP servers and capabilities</p>
         </div>
         <div className="flex items-center gap-2">
           <Checkbox

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -222,30 +222,31 @@ export default function KeysPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Name</TableHead>
-                <TableHead className="text-muted-foreground">Key</TableHead>
-                <TableHead className="text-muted-foreground">Scopes</TableHead>
-                <TableHead className="text-muted-foreground">Usage</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Name</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Key</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Scopes</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Usage</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Last Used</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {keys.map((key) => (
                 <TableRow key={key.id} className="border-border/50">
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <div className="font-medium">{key.name}</div>
                     {key.owner_email && (
                       <div className="text-xs text-muted-foreground">{key.owner_email}</div>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <code className="text-sm text-muted-foreground font-mono">
                       {key.key_prefix}
                     </code>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                  <TableCell className="whitespace-nowrap">
+                    <div className="flex gap-1">
                       {key.scopes.slice(0, 3).map((scope) => (
                         <Badge key={scope} variant="secondary" className="text-xs">
                           {scope}
@@ -258,13 +259,20 @@ export default function KeysPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <div className="text-sm">{key.total_requests.toLocaleString()}</div>
                     <div className="text-xs text-muted-foreground">
                       {key.rate_limit_rpm} rpm
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <div className="text-sm text-muted-foreground">
+                      {key.last_used_at
+                        ? formatTimeAgo(Math.floor((Date.now() - new Date(key.last_used_at).getTime()) / 1000))
+                        : "Never"}
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
                     {key.is_active ? (
                       <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -277,7 +285,7 @@ export default function KeysPage() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     {key.is_active && (
                       <Button
                         variant="ghost"

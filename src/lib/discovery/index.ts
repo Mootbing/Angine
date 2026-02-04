@@ -39,7 +39,7 @@ export async function discoverAgents(params: {
   task: string;
   threshold?: number;
   limit?: number;
-}): Promise<Array<{ id: string; name: string; package_name: string; similarity: number }>> {
+}): Promise<Array<{ id: string; name: string; mcp_package: string; similarity: number }>> {
   const { task, threshold = 0.7, limit = 5 } = params;
   const supabase = getSupabaseAdmin();
 
@@ -79,7 +79,7 @@ export async function registerAgent(params: {
     .insert({
       name: params.name,
       description: params.description,
-      package_name: params.packageName,
+      mcp_package: params.packageName,
       version: params.version || "1.0.0",
       embedding,
       verified: false,
@@ -127,7 +127,7 @@ export async function listAgents(params?: {
 
   let query = supabase
     .from("agents")
-    .select("id, name, description, package_name, version, verified, created_at, updated_at")
+    .select("id, name, description, mcp_package, version, category, verified, created_at, updated_at")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 

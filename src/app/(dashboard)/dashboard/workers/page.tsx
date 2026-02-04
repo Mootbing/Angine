@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -168,11 +168,11 @@ export default function WorkersPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Worker ID</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-                <TableHead className="text-muted-foreground">Health</TableHead>
-                <TableHead className="text-muted-foreground">Active Jobs</TableHead>
-                <TableHead className="text-muted-foreground">Last Heartbeat</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Worker ID</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Status</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Health</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Active Jobs</TableHead>
+                <TableHead className="text-muted-foreground whitespace-nowrap">Last Heartbeat</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -182,13 +182,13 @@ export default function WorkersPage() {
 
                 return (
                   <TableRow key={worker.id} className="border-border/50">
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <div className="font-mono text-sm">{worker.id}</div>
                       {worker.hostname && (
                         <div className="text-xs text-muted-foreground">{worker.hostname}</div>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <Badge
                         variant="outline"
                         className={cn("capitalize", status.color, status.bg, status.border)}
@@ -196,19 +196,19 @@ export default function WorkersPage() {
                         {worker.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <div className={cn("flex items-center gap-2", health.color)}>
                         {health.icon}
                         <span className="text-sm capitalize">{worker.health}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <Badge variant="secondary">{worker.active_jobs}</Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <Clock className="w-3.5 h-3.5" />
-                        {worker.seconds_since_heartbeat}s ago
+                        {formatTimeAgo(worker.seconds_since_heartbeat)}
                       </div>
                     </TableCell>
                   </TableRow>

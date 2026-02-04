@@ -1,224 +1,167 @@
-# Engine - Agent Operations Platform
+# Engine - AI Agent Platform
 
-A production-ready platform for AI agent task execution with multi-model LLM support, vector-based tool discovery, and secure sandbox execution.
+A platform for running AI agents that can execute tasks using tools like web fetching, Python execution, and file operations.
 
-## Features
+## How It Works
 
-- **Multi-Model Support**: Switch between Claude, GPT-4, Gemini, DeepSeek, and Llama models via OpenRouter
-- **Tool Marketplace**: Vector similarity search discovers relevant tools/agents for each task
-- **Secure Sandbox**: Isolated Python environments powered by E2B with automatic package installation
-- **Human-in-the-Loop**: Checkpoint/resume pattern for agent-human interaction
-- **File Attachments**: Upload files from the dashboard to be used in agent tasks
-- **Real-time Logs**: Stream job execution logs via Supabase Realtime
-- **Modern Dashboard**: Built with shadcn/ui and Tailwind CSS
+```
+User submits task → Job Queue → Worker picks up
+                                      ↓
+                    ┌─────────────────────────────┐
+                    │       Agent Loop            │
+                    │                             │
+                    │  LLM decides tool to call   │
+                    │           ↓                 │
+                    │  Worker executes tool       │
+                    │           ↓                 │
+                    │  Result back to LLM         │
+                    │           ↓                 │
+                    │  Repeat until done          │
+                    └─────────────────────────────┘
+                                      ↓
+                              Job completed
+```
+
+The LLM uses **native tool calling** to decide what to do. No code generation - the LLM calls tools directly and the worker executes them.
+
+## Built-in Tools
+
+| Tool | Description |
+|------|-------------|
+| `fetch_url` | HTTP requests to any URL (APIs, web pages) |
+| `run_python` | Execute Python code in E2B sandbox |
+| `read_file` | Read uploaded file attachments |
+| `write_file` | Save output files as artifacts |
+| `ask_user` | Pause and ask user a question (HITL) |
+| `final_answer` | Return the final result |
 
 ## Tech Stack
 
 - **Frontend**: Next.js 14, shadcn/ui, Tailwind CSS
-- **Backend**: Next.js API Routes
-- **Database**: Supabase (PostgreSQL + pgvector)
-- **Worker**: Node.js with E2B sandbox
-- **LLM**: OpenRouter (multi-model)
-- **Embeddings**: OpenAI text-embedding-3-small
-- **Rate Limiting**: Upstash Redis
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Dashboard & API Clients                      │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              │ HTTPS + API Key Auth
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Next.js (Vercel)                              │
-│  - Dashboard UI (shadcn/ui)                                      │
-│  - REST API Routes                                               │
-│  - File Upload to Supabase Storage                               │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-            ┌─────────────────┼─────────────────┐
-            │                 │                 │
-            ▼                 ▼                 ▼
-    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-    │   Supabase   │  │   Upstash    │  │  OpenRouter  │
-    │  PostgreSQL  │  │    Redis     │  │   + OpenAI   │
-    │  + pgvector  │  │ Rate Limit   │  │  Embeddings  │
-    └──────────────┘  └──────────────┘  └──────────────┘
-            │
-            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   Worker Pool (Railway)                          │
-│  - Job claiming with FOR UPDATE SKIP LOCKED                      │
-│  - Tool discovery via vector similarity                          │
-│  - LLM code generation                                           │
-│  - E2B sandbox execution                                         │
-│  - Artifact collection                                           │
-└─────────────────────────────────────────────────────────────────┘
-```
+- **Database**: Supabase (PostgreSQL)
+- **Worker**: Node.js on Railway
+- **LLM**: OpenRouter (Claude, GPT-4, Gemini, etc.)
+- **Sandbox**: E2B for Python execution
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Install
 
 ```bash
+git clone https://github.com/your-org/engine
+cd engine
 npm install
 ```
 
-### 2. Configure Environment
-
-Create a `.env` file:
+### 2. Environment Variables
 
 ```env
 # Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
 
-# E2B Sandbox
-E2B_API_KEY=your_e2b_api_key
+# E2B (Python sandbox)
+E2B_API_KEY=e2b_...
 
-# OpenRouter (multi-model LLM)
-OPENROUTER_API_KEY=your_openrouter_api_key
-
-# OpenAI (for embeddings only)
-OPENAI_API_KEY=your_openai_api_key
-
-# Upstash Redis (rate limiting)
-UPSTASH_REDIS_REST_URL=your_upstash_url
-UPSTASH_REDIS_REST_TOKEN=your_upstash_token
+# OpenRouter (LLM)
+OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
-### 3. Set Up Database
+### 3. Database Setup
 
-Run the migration against your Supabase project:
+Run `supabase/migrations/001_full_schema.sql` in Supabase SQL Editor.
 
-```bash
-# Copy supabase/migrations/001_full_schema.sql to Supabase SQL Editor and execute
-```
+Create a storage bucket named `job-files` (public).
 
-This creates all tables, functions, and seeds 8 built-in tools.
-
-### 4. Create Storage Bucket
-
-In Supabase Dashboard:
-1. Go to Storage
-2. Create a new bucket named `job-files`
-3. Set it to **public**
-
-### 5. Run Development
+### 4. Run Locally
 
 ```bash
-# Run both Next.js and Worker
 npm run dev:all
-
-# Or run separately:
-npm run dev        # Frontend + API
-npm run worker:dev # Worker (separate terminal)
 ```
 
-## Supported Models
+- Dashboard: http://localhost:3000/dashboard
+- Worker runs alongside
 
-| Model | Provider |
-|-------|----------|
-| Claude Sonnet 4 | Anthropic |
-| Claude 3.5 Sonnet | Anthropic |
-| GPT-4o | OpenAI |
-| GPT-4o Mini | OpenAI |
-| Gemini 2.0 Flash | Google |
-| DeepSeek Chat | DeepSeek |
-| Llama 3.3 70B | Meta |
+## API
 
-## Built-in Tools
-
-The platform comes with 8 pre-registered, verified tools:
-
-- **Web Scraper** - requests, beautifulsoup4
-- **Data Analyzer** - pandas, numpy
-- **Chart Generator** - matplotlib, seaborn
-- **Image Processor** - pillow
-- **Math & Statistics** - numpy, scipy
-- **File Handler** - csv, json
-- **API Client** - requests
-- **Text Processor** - re, collections
-
-Tools are discovered automatically via vector similarity search.
-
-## API Reference
-
-### Jobs
-
-```
-POST   /api/v1/jobs              Create job (with optional attachments)
-GET    /api/v1/jobs              List jobs
-GET    /api/v1/jobs/:id          Get job details
-GET    /api/v1/jobs/:id/logs     Get job logs
-POST   /api/v1/jobs/:id/respond  Respond to HITL question
-POST   /api/v1/jobs/upload       Upload file attachment
-```
-
-### Agents
-
-```
-GET    /api/v1/agents            List agents/tools
-POST   /api/v1/agents            Register agent
-POST   /api/v1/agents/discover   Discover agents for task
-```
-
-### Admin
-
-```
-POST   /api/v1/admin/keys        Create API key
-GET    /api/v1/admin/keys        List API keys
-DELETE /api/v1/admin/keys/:id    Revoke API key
-GET    /api/v1/admin/workers     List workers
-GET    /api/v1/admin/metrics     System metrics
-```
-
-## Example: Create a Job with Attachment
+### Create a Job
 
 ```bash
-# 1. Upload file
-curl -X POST https://your-domain.com/api/v1/jobs/upload \
-  -H "Authorization: Bearer engine_live_..." \
+curl -X POST http://localhost:3000/api/v1/jobs \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"task": "What is 2 + 2?"}'
+```
+
+### With File Attachment
+
+```bash
+# Upload file first
+curl -X POST http://localhost:3000/api/v1/jobs/upload \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -F "file=@data.csv"
 
-# 2. Create job with attachment
-curl -X POST https://your-domain.com/api/v1/jobs \
-  -H "Authorization: Bearer engine_live_..." \
+# Create job with attachment
+curl -X POST http://localhost:3000/api/v1/jobs \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "task": "Analyze the CSV file and create a summary chart",
-    "model": "anthropic/claude-sonnet-4",
-    "attachments": [{
-      "filename": "data.csv",
-      "storage_path": "uploads/...",
-      "public_url": "https://..."
-    }]
+    "task": "Analyze this CSV and summarize the data",
+    "attachments": [{"filename": "data.csv", "public_url": "..."}]
   }'
+```
+
+### Endpoints
+
+```
+POST   /api/v1/jobs              Create job
+GET    /api/v1/jobs              List jobs
+GET    /api/v1/jobs/:id          Get job details
+GET    /api/v1/jobs/:id/logs     Get execution logs
+POST   /api/v1/jobs/:id/respond  Answer agent question (HITL)
+POST   /api/v1/jobs/upload       Upload attachment
+
+GET    /api/v1/agents            List MCP servers
+POST   /api/v1/admin/keys        Create API key
+GET    /api/v1/admin/workers     List workers
+GET    /api/v1/admin/metrics     System metrics
 ```
 
 ## Deployment
 
 ### Vercel (Frontend + API)
 
-1. Connect your repo to Vercel
+1. Connect repo to Vercel
 2. Add environment variables
 3. Deploy
 
 ### Railway (Worker)
 
-1. Create new project from repo
+1. Create project from repo
 2. Add environment variables
 3. Set start command: `npm run worker`
 
-Or use the Docker workflow with `railway.json`:
+Add `railway.json`:
 ```json
 {
   "build": { "builder": "NIXPACKS" },
-  "deploy": { "startCommand": "npm run worker" }
+  "deploy": {
+    "startCommand": "npm run worker",
+    "restartPolicyType": "ON_FAILURE"
+  }
 }
 ```
+
+## Supported Models
+
+All models available through OpenRouter:
+
+- Claude Sonnet 4 (default)
+- Claude 3.5 Sonnet
+- GPT-4o / GPT-4o Mini
+- Gemini 2.0 Flash
+- DeepSeek Chat
+- Llama 3.3 70B
 
 ## License
 

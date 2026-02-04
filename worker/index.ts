@@ -1,6 +1,10 @@
 import { hostname } from "os";
+import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import type { Job, ExecutionState, WorkerConfig } from "../src/types";
+
+// Load environment variables from .env.local
+loadEnv({ path: ".env.local" });
 
 // Environment validation
 const requiredEnvVars = [

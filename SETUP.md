@@ -1,18 +1,13 @@
 # Engine Setup Guide
 
-Complete setup instructions for deploying the Engine platform.
-
 ## Prerequisites
 
 - Node.js 18+
-- npm or pnpm
 - Supabase account
 - E2B account
 - OpenRouter account
-- OpenAI account (for embeddings)
-- Upstash account (optional, for rate limiting)
-- Vercel account (for deployment)
-- Railway account (for worker deployment)
+- Vercel account (frontend)
+- Railway account (worker)
 
 ## Step 1: Clone and Install
 
@@ -37,15 +32,14 @@ npm install
 3. Run the SQL
 
 This creates:
-- `api_keys` - Authentication
-- `agents` - Tool registry with vector embeddings
-- `job_queue` - Jobs with status tracking
+- `api_keys` - API key authentication
+- `agents` - MCP server registry
+- `job_queue` - Job queue with status tracking
 - `job_logs` - Real-time execution logs
 - `job_artifacts` - Output files
 - `job_attachments` - Input files
 - `workers` - Worker registry
-- RPC functions for job claiming and tool discovery
-- 8 built-in tools
+- RPC functions for atomic job claiming
 
 ### Create Storage Bucket
 
@@ -59,40 +53,24 @@ This creates:
 
 From Project Settings > API:
 - `NEXT_PUBLIC_SUPABASE_URL` - Project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - service_role key (secret)
+- `SUPABASE_SERVICE_ROLE_KEY` - service_role key (keep secret!)
 
 ## Step 3: E2B Setup
 
 1. Go to [e2b.dev](https://e2b.dev)
-2. Create account and get API key
-3. Save as `E2B_API_KEY`
+2. Create account
+3. Get API key from dashboard
+4. Save as `E2B_API_KEY`
 
 ## Step 4: OpenRouter Setup
 
 1. Go to [openrouter.ai](https://openrouter.ai)
 2. Create account
-3. Add credits ($5-10 recommended to start)
+3. Add credits ($5-10 to start)
 4. Generate API key
 5. Save as `OPENROUTER_API_KEY`
 
-## Step 5: OpenAI Setup (Embeddings)
-
-1. Go to [platform.openai.com](https://platform.openai.com)
-2. Create API key
-3. Save as `OPENAI_API_KEY`
-
-Note: Only used for generating embeddings with text-embedding-3-small
-
-## Step 6: Upstash Setup (Optional)
-
-For rate limiting:
-
-1. Go to [upstash.com](https://upstash.com)
-2. Create Redis database
-3. Get REST URL and token
-4. Save as `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
-
-## Step 7: Create .env File
+## Step 5: Create .env File
 
 ```env
 # Supabase
@@ -104,19 +82,12 @@ E2B_API_KEY=e2b_...
 
 # OpenRouter
 OPENROUTER_API_KEY=sk-or-v1-...
-
-# OpenAI (embeddings)
-OPENAI_API_KEY=sk-...
-
-# Upstash (optional)
-UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
-UPSTASH_REDIS_REST_TOKEN=xxx
 ```
 
-## Step 8: Local Development
+## Step 6: Local Development
 
 ```bash
-# Run everything
+# Run everything (frontend + worker)
 npm run dev:all
 
 # Or separately:
@@ -124,9 +95,24 @@ npm run dev        # Port 3000 - Frontend + API
 npm run worker:dev # Worker with hot reload
 ```
 
-Visit `http://localhost:3000/dashboard` and enter your API key.
+Visit http://localhost:3000/dashboard
 
-## Step 9: Deploy to Vercel
+### Create Your First API Key
+
+1. Open Supabase SQL Editor
+2. Run:
+```sql
+INSERT INTO api_keys (key_prefix, key_hash, name, scopes)
+VALUES (
+  'engine_live_test',
+  encode(sha256('engine_live_test_your_secret_key'::bytea), 'hex'),
+  'Test Key',
+  ARRAY['jobs:read', 'jobs:write', 'admin']
+);
+```
+3. Use `engine_live_test_your_secret_key` as your API key
+
+## Step 7: Deploy to Vercel
 
 ### Via CLI
 
@@ -140,23 +126,15 @@ vercel --prod
 
 1. Go to [vercel.com](https://vercel.com)
 2. Import Git repository
-3. Add environment variables (all from .env)
+3. Add environment variables
 4. Deploy
 
-### Important Vercel Settings
-
-- Framework: Next.js (auto-detected)
-- Build Command: `npm run build`
-- Output Directory: `.next`
-
-## Step 10: Deploy Worker to Railway
-
-### Via Dashboard
+## Step 8: Deploy Worker to Railway
 
 1. Go to [railway.app](https://railway.app)
 2. New Project > Deploy from GitHub repo
 3. Add environment variables (same as .env)
-4. Add `railway.json` to repo root:
+4. Create `railway.json` in repo:
 
 ```json
 {
@@ -184,30 +162,18 @@ Poll interval: 1000ms
 ## Troubleshooting
 
 ### "Missing required environment variable"
-
 Ensure all env vars are set in both Vercel and Railway.
 
 ### "OpenRouter API error: 402"
-
 Add credits to your OpenRouter account.
 
-### "Failed to claim job"
-
-Check Supabase connection and that migrations ran successfully.
-
 ### "E2B sandbox error"
-
 Verify E2B API key and that you have sandbox credits.
 
 ### Worker not processing jobs
-
-1. Check Railway logs for errors
-2. Verify SUPABASE_SERVICE_ROLE_KEY is correct (full JWT)
+1. Check Railway logs
+2. Verify SUPABASE_SERVICE_ROLE_KEY is correct
 3. Ensure worker has all required env vars
-
-### Tool discovery returning empty
-
-The built-in tools need embeddings. They are generated when tasks are submitted.
 
 ## Production Checklist
 
@@ -218,19 +184,3 @@ The built-in tools need embeddings. They are generated when tasks are submitted.
 - [ ] Admin API key created
 - [ ] Worker deployed and healthy
 - [ ] Test job submission and execution
-
-## Scaling
-
-### Multiple Workers
-
-Deploy multiple Railway instances - job claiming is atomic with `FOR UPDATE SKIP LOCKED`.
-
-### Rate Limiting
-
-Configure Upstash for production rate limiting. Adjust `rate_limit_rpm` per API key.
-
-### Monitoring
-
-- Supabase Dashboard: Database metrics
-- Railway: Worker logs and metrics
-- Vercel: API metrics and logs

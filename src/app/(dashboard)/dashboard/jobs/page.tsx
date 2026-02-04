@@ -43,13 +43,14 @@ interface Job {
   agent_question: string | null;
 }
 
-const statusConfig: Record<string, { color: string; bg: string; border: string }> = {
-  queued: { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/20" },
-  running: { color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-  completed: { color: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/20" },
-  failed: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
-  waiting_for_user: { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/20" },
-  cancelled: { color: "text-zinc-400", bg: "bg-zinc-500/10", border: "border-zinc-500/20" },
+// Use CSS classes from globals.css for consistent status styling
+const statusClasses: Record<string, string> = {
+  queued: "status-queued",
+  running: "status-running",
+  completed: "status-completed",
+  failed: "status-failed",
+  waiting_for_user: "status-waiting_for_user",
+  cancelled: "status-cancelled",
 };
 
 export default function JobsPage() {
@@ -114,12 +115,12 @@ export default function JobsPage() {
   }, [statusFilter]);
 
   return (
-    <div className="space-y-6 animate-fade-in min-w-0">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
-          <p className="text-muted-foreground">View and manage your job queue</p>
+          <h1 className="page-title">Jobs</h1>
+          <p className="page-description">View and manage your job queue</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -150,7 +151,7 @@ export default function JobsPage() {
       )}
 
       {loading ? (
-        <Card className="bg-card/50 backdrop-blur border-border/50">
+        <Card className="card-glass">
           <CardContent className="p-6 space-y-4">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="flex items-center gap-4">
@@ -162,31 +163,20 @@ export default function JobsPage() {
           </CardContent>
         </Card>
       ) : jobs.length === 0 ? (
-        <Card className="bg-card/50 backdrop-blur border-border/50">
-          <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-              <Inbox className="w-8 h-8 text-muted-foreground" />
+        <Card className="card-glass">
+          <CardContent className="card-empty-state">
+            <div className="card-empty-icon">
+              <Inbox className="card-empty-icon-inner" />
             </div>
             <h3 className="text-lg font-medium mb-1">No jobs found</h3>
-            <p className="text-muted-foreground">Submit a new job from the dashboard to get started.</p>
+            <p className="page-description">Submit a new job from the dashboard to get started.</p>
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden relative">
-          {/* Left shadow */}
-          <div
-            className={cn(
-              "absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-card/80 to-transparent pointer-events-none z-10 transition-opacity duration-200",
-              showLeftShadow ? "opacity-100" : "opacity-0"
-            )}
-          />
-          {/* Right shadow */}
-          <div
-            className={cn(
-              "absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card/80 to-transparent pointer-events-none z-10 transition-opacity duration-200",
-              showRightShadow ? "opacity-100" : "opacity-0"
-            )}
-          />
+        <Card className="card-glass overflow-hidden relative">
+          {/* Scroll shadows */}
+          <div className={cn("scroll-shadow-left transition-opacity duration-200", showLeftShadow ? "opacity-100" : "opacity-0")} />
+          <div className={cn("scroll-shadow-right transition-opacity duration-200", showRightShadow ? "opacity-100" : "opacity-0")} />
           <div
             ref={scrollRef}
             onScroll={updateScrollShadows}
@@ -248,12 +238,10 @@ export default function JobsPage() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const config = statusConfig[status] || statusConfig.cancelled;
-
   return (
     <Badge
       variant="outline"
-      className={cn("capitalize", config.color, config.bg, config.border)}
+      className={cn("capitalize", statusClasses[status] || "status-neutral")}
     >
       {status.replace("_", " ")}
     </Badge>

@@ -155,12 +155,12 @@ export default function ToolsPage() {
   }, [debouncedQuery, fetchAgents, searchAgents]);
 
   return (
-    <div className="space-y-6 animate-fade-in min-w-0">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tools & MCPs</h1>
-          <p className="text-muted-foreground">Browse available MCP servers and capabilities</p>
+          <h1 className="page-title">Tools & MCPs</h1>
+          <p className="page-description">Browse available MCP servers and capabilities</p>
         </div>
         <div className="flex items-center gap-2">
           <Checkbox
@@ -198,7 +198,7 @@ export default function ToolsPage() {
       {loading ? (
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
           {[...Array(4)].map((_, i) => (
-            <Card key={i} className="bg-card/50 backdrop-blur border-border/50">
+            <Card key={i} className="card-glass">
               <CardContent className="p-6">
                 <div className="flex gap-4">
                   <Skeleton className="w-12 h-12 rounded-xl shrink-0" />
@@ -213,15 +213,15 @@ export default function ToolsPage() {
           ))}
         </div>
       ) : agents.length === 0 ? (
-        <Card className="bg-card/50 backdrop-blur border-border/50">
-          <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-              <Bot className="w-8 h-8 text-muted-foreground" />
+        <Card className="card-glass">
+          <CardContent className="card-empty-state">
+            <div className="card-empty-icon">
+              <Bot className="card-empty-icon-inner" />
             </div>
             <h3 className="text-lg font-medium mb-1">
               {searchQuery ? "No matching tools found" : "No agents found"}
             </h3>
-            <p className="text-muted-foreground">
+            <p className="page-description">
               {searchQuery
                 ? "Try a different search query or check 'Show unverified'."
                 : "Register new agents to expand capabilities."}
@@ -233,7 +233,7 @@ export default function ToolsPage() {
           {agents.map((agent) => (
             <Card
               key={agent.id}
-              className="bg-card/50 backdrop-blur border-border/50 hover:border-border transition-all group overflow-hidden"
+              className="card-glass hover:border-border transition-all group overflow-hidden"
             >
               <CardContent className="p-6">
                 <div className="flex gap-4">
@@ -262,12 +262,12 @@ export default function ToolsPage() {
                           v{agent.version}
                         </Badge>
                         {agent.verified ? (
-                          <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
+                          <Badge className="status-success">
                             <CheckCircle2 className="w-3 h-3 mr-1" />
                             Verified
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-amber-400 border-amber-500/20">
+                          <Badge variant="outline" className="status-warning">
                             <Clock className="w-3 h-3 mr-1" />
                             Pending
                           </Badge>

@@ -125,12 +125,12 @@ export default function KeysPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in min-w-0">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">API Keys</h1>
-          <p className="text-muted-foreground">Manage authentication credentials</p>
+          <h1 className="page-title">API Keys</h1>
+          <p className="page-description">Manage authentication credentials</p>
         </div>
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
@@ -159,7 +159,7 @@ export default function KeysPage() {
 
       {/* New Key Display */}
       {newKeyData && (
-        <Alert className="border-green-500/20 bg-green-500/5">
+        <Alert className="alert-success">
           <ShieldCheck className="h-4 w-4 text-green-400" />
           <AlertDescription className="space-y-3">
             <div>
@@ -195,7 +195,7 @@ export default function KeysPage() {
       )}
 
       {loading ? (
-        <Card className="bg-card/50 backdrop-blur border-border/50">
+        <Card className="card-glass">
           <CardContent className="p-6 space-y-4">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex items-center gap-4">
@@ -207,45 +207,45 @@ export default function KeysPage() {
           </CardContent>
         </Card>
       ) : keys.length === 0 ? (
-        <Card className="bg-card/50 backdrop-blur border-border/50">
-          <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-              <KeyRound className="w-8 h-8 text-muted-foreground" />
+        <Card className="card-glass">
+          <CardContent className="card-empty-state">
+            <div className="card-empty-icon">
+              <KeyRound className="card-empty-icon-inner" />
             </div>
             <h3 className="text-lg font-medium mb-1">No API keys found</h3>
-            <p className="text-muted-foreground">Create an API key to get started.</p>
+            <p className="page-description">Create an API key to get started.</p>
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
-          <div className="overflow-x-auto">
+        <Card className="card-glass overflow-hidden">
+          <div className="table-container">
           <Table>
             <TableHeader>
-              <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="text-muted-foreground whitespace-nowrap">Name</TableHead>
-                <TableHead className="text-muted-foreground whitespace-nowrap">Key</TableHead>
-                <TableHead className="text-muted-foreground whitespace-nowrap">Scopes</TableHead>
-                <TableHead className="text-muted-foreground whitespace-nowrap">Usage</TableHead>
-                <TableHead className="text-muted-foreground whitespace-nowrap">Last Used</TableHead>
-                <TableHead className="text-muted-foreground whitespace-nowrap">Status</TableHead>
+              <TableRow className="table-row-base hover:bg-transparent">
+                <TableHead className="table-head-cell">Name</TableHead>
+                <TableHead className="table-head-cell">Key</TableHead>
+                <TableHead className="table-head-cell">Scopes</TableHead>
+                <TableHead className="table-head-cell">Usage</TableHead>
+                <TableHead className="table-head-cell">Last Used</TableHead>
+                <TableHead className="table-head-cell">Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {keys.map((key) => (
-                <TableRow key={key.id} className="border-border/50">
-                  <TableCell className="whitespace-nowrap">
+                <TableRow key={key.id} className="table-row-base">
+                  <TableCell className="table-cell">
                     <div className="font-medium">{key.name}</div>
                     {key.owner_email && (
                       <div className="text-xs text-muted-foreground">{key.owner_email}</div>
                     )}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <code className="text-sm text-muted-foreground font-mono">
+                  <TableCell className="table-cell">
+                    <code className="text-sm text-muted-foreground">
                       {key.key_prefix}
                     </code>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="table-cell">
                     <div className="flex gap-1">
                       {key.scopes.slice(0, 3).map((scope) => (
                         <Badge key={scope} variant="secondary" className="text-xs">
@@ -259,38 +259,38 @@ export default function KeysPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="table-cell">
                     <div className="text-sm">{key.total_requests.toLocaleString()}</div>
                     <div className="text-xs text-muted-foreground">
                       {key.rate_limit_rpm} rpm
                     </div>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="table-cell">
                     <div className="text-sm text-muted-foreground">
                       {key.last_used_at
                         ? formatTimeAgo(Math.floor((Date.now() - new Date(key.last_used_at).getTime()) / 1000))
                         : "Never"}
                     </div>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="table-cell">
                     {key.is_active ? (
-                      <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
+                      <Badge className="status-success">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Active
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-red-400 border-red-500/20">
+                      <Badge variant="outline" className="status-danger">
                         <XCircle className="w-3 h-3 mr-1" />
                         Revoked
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="table-cell">
                     {key.is_active && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        className="text-danger hover:text-red-300 hover:bg-red-500/10"
                         onClick={() => handleRevoke(key.id)}
                       >
                         <Trash2 className="w-4 h-4" />

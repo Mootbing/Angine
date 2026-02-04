@@ -274,21 +274,21 @@ export default function ApisPage() {
   const selectedKey = apiKeys.find(k => k.id === selectedKeyId);
 
   return (
-    <div className="space-y-8 animate-fade-in min-w-0">
+    <div className="page-container space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">API Playground</h1>
-        <p className="text-muted-foreground">
+        <h1 className="page-title">API Playground</h1>
+        <p className="page-description">
           Test API endpoints visually
         </p>
       </div>
 
       {/* API Key Selector */}
-      <Card className="overflow-hidden">
+      <Card className="card-glass overflow-hidden">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
-              <KeyRound className="w-5 h-5 text-background" />
+            <div className="card-header-icon">
+              <KeyRound className="card-header-icon-inner" />
             </div>
             <div>
               <CardTitle>Select API Key</CardTitle>
@@ -371,14 +371,14 @@ export default function ApisPage() {
                         : "Never"}
                     </div>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="table-cell">
                     {selectedKey.is_active ? (
-                      <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
+                      <Badge className="status-success">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Active
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-red-400 border-red-500/20">
+                      <Badge variant="outline" className="status-danger">
                         Revoked
                       </Badge>
                     )}
@@ -392,11 +392,11 @@ export default function ApisPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Job Submission */}
-        <Card>
+        <Card className="card-glass">
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-background" />
+              <div className="card-header-icon">
+                <Sparkles className="card-header-icon-inner" />
               </div>
               <div>
                 <CardTitle>POST /api/v1/jobs</CardTitle>
@@ -548,9 +548,9 @@ Examples:
               )}
 
               {submitSuccess && (
-                <Alert className="border-green-500/20 bg-green-500/5">
-                  <CheckCircle2 className="h-4 w-4 text-green-400" />
-                  <AlertDescription className="text-green-400">{submitSuccess}</AlertDescription>
+                <Alert className="alert-success">
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                  <AlertDescription className="text-success">{submitSuccess}</AlertDescription>
                 </Alert>
               )}
             </form>
@@ -558,11 +558,11 @@ Examples:
         </Card>
 
         {/* MCP Tool Discovery */}
-        <Card>
+        <Card className="card-glass">
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
-                <Search className="w-5 h-5 text-background" />
+              <div className="card-header-icon">
+                <Search className="card-header-icon-inner" />
               </div>
               <div>
                 <CardTitle>POST /api/v1/agents/discover</CardTitle>

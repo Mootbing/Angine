@@ -119,11 +119,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in min-w-0">
+    <div className="page-container space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
+        <h1 className="page-title">Dashboard</h1>
+        <p className="page-description">
           Monitor your agent operations at a glance.
         </p>
       </div>

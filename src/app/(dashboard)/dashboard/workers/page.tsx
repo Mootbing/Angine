@@ -171,7 +171,7 @@ export default function WorkersPage() {
         </Card>
       ) : (
         <Card className="card-glass overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="table-container px-6 pb-6">
           <Table>
             <TableHeader>
               <TableRow className="border-border/50 hover:bg-transparent">
@@ -193,7 +193,7 @@ export default function WorkersPage() {
                     </TableCell>
                     <TableCell className="table-cell">
                       <Badge
-                        variant="outline"
+                        variant="status"
                         className={cn("capitalize", workerStatusClasses[worker.status] || "status-neutral")}
                       >
                         {worker.status}

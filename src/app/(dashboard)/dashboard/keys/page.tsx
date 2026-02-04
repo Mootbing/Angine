@@ -218,7 +218,7 @@ export default function KeysPage() {
         </Card>
       ) : (
         <Card className="card-glass overflow-hidden">
-          <div className="table-container">
+          <div className="table-container px-6 pb-6">
           <Table>
             <TableHeader>
               <TableRow className="table-row-base hover:bg-transparent">
@@ -274,12 +274,12 @@ export default function KeysPage() {
                   </TableCell>
                   <TableCell className="table-cell">
                     {key.is_active ? (
-                      <Badge className="status-success">
+                      <Badge variant="status" className="status-success">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Active
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="status-danger">
+                      <Badge variant="status" className="status-danger">
                         <XCircle className="w-3 h-3 mr-1" />
                         Revoked
                       </Badge>

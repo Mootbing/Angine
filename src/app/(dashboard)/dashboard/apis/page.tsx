@@ -319,7 +319,7 @@ export default function ApisPage() {
           </Select>
         </CardContent>
         {selectedKey && (
-          <div className="overflow-x-auto border-t border-border/50">
+          <div className="overflow-x-auto border-t border-border/50 px-6 pb-4">
             <Table>
               <TableHeader>
                 <TableRow className="border-border/50 hover:bg-transparent">

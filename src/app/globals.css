@@ -179,58 +179,58 @@
 }
 
 /* ============================================
-   Status Colors
+   Status Colors - Border + colored text
    ============================================ */
 @layer components {
-  /* Status badges */
+  /* Job status badges - 1px border (25% opacity) with colored text */
   .status-queued {
-    @apply bg-amber-500/10 text-amber-400 border-amber-500/20;
+    @apply bg-transparent text-amber-500 border border-amber-500/25;
   }
 
   .status-running {
-    @apply bg-blue-500/10 text-blue-400 border-blue-500/20;
+    @apply bg-transparent text-blue-500 border border-blue-500/25;
   }
 
   .status-completed {
-    @apply bg-emerald-500/10 text-emerald-400 border-emerald-500/20;
+    @apply bg-transparent text-emerald-500 border border-emerald-500/25;
   }
 
   .status-failed {
-    @apply bg-red-500/10 text-red-400 border-red-500/20;
+    @apply bg-transparent text-red-500 border border-red-500/25;
   }
 
   .status-waiting_for_user {
-    @apply bg-amber-500/10 text-amber-400 border-amber-500/20;
+    @apply bg-transparent text-amber-500 border border-amber-500/25;
   }
 
   .status-cancelled {
-    @apply bg-zinc-500/10 text-zinc-400 border-zinc-500/20;
+    @apply bg-transparent text-zinc-500 border border-zinc-500/25;
   }
 
-  /* Semantic status colors */
+  /* Semantic status colors - border (25% opacity) + text */
   .status-success {
-    @apply bg-green-500/10 text-green-400 border-green-500/20;
+    @apply bg-transparent text-emerald-500 border border-emerald-500/25;
   }
 
   .status-warning {
-    @apply bg-amber-500/10 text-amber-400 border-amber-500/20;
+    @apply bg-transparent text-amber-500 border border-amber-500/25;
   }
 
   .status-danger {
-    @apply bg-red-500/10 text-red-400 border-red-500/20;
+    @apply bg-transparent text-red-500 border border-red-500/25;
   }
 
   .status-info {
-    @apply bg-blue-500/10 text-blue-400 border-blue-500/20;
+    @apply bg-transparent text-blue-500 border border-blue-500/25;
   }
 
   .status-neutral {
-    @apply bg-zinc-500/10 text-zinc-400 border-zinc-500/20;
+    @apply bg-transparent text-zinc-500 border border-zinc-500/25;
   }
 
-  /* Worker health */
+  /* Worker health indicators */
   .health-healthy {
-    @apply text-green-400;
+    @apply text-emerald-400;
   }
 
   .health-warning {
@@ -241,17 +241,17 @@
     @apply text-red-400;
   }
 
-  /* Worker status */
+  /* Worker status badges - border (25% opacity) + text */
   .worker-active {
-    @apply bg-green-500/10 text-green-400 border-green-500/20;
+    @apply bg-transparent text-emerald-500 border border-emerald-500/25;
   }
 
   .worker-draining {
-    @apply bg-amber-500/10 text-amber-400 border-amber-500/20;
+    @apply bg-transparent text-amber-500 border border-amber-500/25;
   }
 
   .worker-dead {
-    @apply bg-red-500/10 text-red-400 border-red-500/20;
+    @apply bg-transparent text-red-500 border border-red-500/25;
   }
 }
 

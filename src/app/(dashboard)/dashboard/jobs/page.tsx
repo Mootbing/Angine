@@ -180,7 +180,7 @@ export default function JobsPage() {
           <div
             ref={scrollRef}
             onScroll={updateScrollShadows}
-            className="overflow-x-auto"
+            className="overflow-x-auto px-6 pb-6"
           >
             <Table>
               <TableHeader>
@@ -240,7 +240,7 @@ export default function JobsPage() {
 function StatusBadge({ status }: { status: string }) {
   return (
     <Badge
-      variant="outline"
+      variant="status"
       className={cn("capitalize", statusClasses[status] || "status-neutral")}
     >
       {status.replace("_", " ")}
